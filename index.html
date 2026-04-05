@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Kütüphane Takip</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     *{
       box-sizing:border-box;
@@ -168,46 +169,46 @@
     <div class="headerRow">
       <div class="header">📚 Kütüphane Takip</div>
 
-      <a class="gearLink" href="./ayarlar.html?v=1">
-        <button class="gearBtn">⚙️</button>
+      <a class="gearLink" href="./ayarlar.html?v=28">
+        <button class="gearBtn" type="button">⚙️</button>
       </a>
     </div>
 
     <div class="subInfo">Modüler JS altyapısı aktif</div>
 
     <div class="grid">
-      <button class="menuBtn" onclick="ekleForm()">
+      <button class="menuBtn" type="button" onclick="ekleForm()">
         <div class="icon">➕</div>
         <div class="menuText">Kitap Ekle</div>
       </button>
 
-      <button class="menuBtn" onclick="oduncVerForm()">
+      <button class="menuBtn" type="button" onclick="oduncVerForm()">
         <div class="icon">📤</div>
         <div class="menuText">Ödünç Ver</div>
       </button>
 
-      <button class="menuBtn" onclick="iadeForm()">
+      <button class="menuBtn" type="button" onclick="iadeForm()">
         <div class="icon">📥</div>
         <div class="menuText">İade Al</div>
       </button>
 
-      <button class="menuBtn" onclick="silForm()">
+      <button class="menuBtn" type="button" onclick="silForm()">
         <div class="icon">🗑️</div>
         <div class="menuText">Kitap Sil</div>
       </button>
     </div>
 
-    <a class="linkLike" href="./liste.html?v=20">
-      <button class="listBtn">📚<br>Kitap Listesi</button>
+    <a class="linkLike" href="./liste.html?v=28">
+      <button class="listBtn" type="button">📚<br>Kitap Listesi</button>
     </a>
 
     <div id="formAlani"></div>
   </div>
 
-  <script src="./js/api.js"></script>
-  <script src="./js/ekle.js"></script>
-  <script src="./js/odunc.js"></script>
-  <script src="./js/iade.js"></script>
-  <script src="./js/sil.js"></script>
+  <script src="./js/api.js?v=28"></script>
+  <script src="./js/ekle.js?v=28"></script>
+  <script src="./js/odunc.js?v=28"></script>
+  <script src="./js/iade.js?v=28"></script>
+  <script src="./js/sil.js?v=28"></script>
 </body>
 </html>
