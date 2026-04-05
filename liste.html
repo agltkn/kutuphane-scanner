@@ -6,6 +6,7 @@
   <title>Kütüphane Kitap Listesi</title>
   <style>
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -13,10 +14,12 @@
       color: #222;
       padding: 14px;
     }
+
     .app {
       max-width: 900px;
       margin: 0 auto;
     }
+
     .header {
       background: #111;
       color: #fff;
@@ -27,6 +30,7 @@
       text-align: center;
       margin-bottom: 14px;
     }
+
     .toolbar {
       background: #fff;
       border-radius: 18px;
@@ -34,6 +38,7 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       margin-bottom: 14px;
     }
+
     input {
       width: 100%;
       padding: 16px;
@@ -41,54 +46,135 @@
       border-radius: 12px;
       border: 1px solid #ccc;
     }
+
     .list {
       display: grid;
       gap: 12px;
     }
+
     .card {
       background: #fff;
       border-radius: 18px;
       padding: 18px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
+
     .title {
       font-size: 22px;
       font-weight: bold;
       margin-bottom: 8px;
+      line-height: 1.35;
+      word-break: break-word;
     }
+
     .line {
       font-size: 16px;
       margin: 4px 0;
       line-height: 1.45;
       word-break: break-word;
     }
+
     .status {
       display: inline-block;
-      margin-top: 8px;
+      margin-top: 10px;
       padding: 8px 12px;
       border-radius: 999px;
       font-size: 14px;
       font-weight: bold;
     }
+
     .rafta {
       background: #d1fae5;
       color: #065f46;
     }
+
     .oduncte {
       background: #fee2e2;
       color: #991b1b;
     }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #fff;
+      width: 100%;
+    }
+
+    .btnLoan {
+      background: #0b57d0;
+    }
+
+    .btnReturn {
+      background: #047857;
+    }
+
+    .btnDisabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
     .empty {
       text-align: center;
       color: #666;
       padding: 30px;
       font-size: 18px;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .message {
+      display: none;
+      margin-bottom: 14px;
+      padding: 16px;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: bold;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .success {
+      display: block;
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .error {
+      display: block;
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .warn {
+      display: block;
+      background: #ffedd5;
+      color: #9a3412;
+    }
+
+    @media (max-width: 640px) {
+      .actions {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="header">📚 Kitap Listesi</div>
+
+    <div id="message" class="message"></div>
 
     <div class="toolbar">
       <input
@@ -115,20 +201,49 @@
         .replaceAll("'", '&#039;');
     }
 
-    async function loadBooks() {
+    function showMessage(text, type = 'success') {
+      const el = document.getElementById('message');
+      el.className = 'message ' + type;
+      el.innerHTML = safeHtml(text);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function clearMessage() {
+      const el = document.getElementById('message');
+      el.className = 'message';
+      el.innerHTML = '';
+    }
+
+    async function apiPost(payload) {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          action: 'booksList'
-        })
+        body: JSON.stringify(payload)
       });
 
-      const result = await response.json();
-      books = result.data || [];
-      renderList();
+      return await response.json();
+    }
+
+    async function loadBooks() {
+      clearMessage();
+
+      try {
+        const result = await apiPost({
+          action: 'booksList'
+        });
+
+        if (!result.ok) {
+          showMessage(result.error || 'Liste alınamadı', 'error');
+          return;
+        }
+
+        books = result.data || [];
+        renderList();
+      } catch (err) {
+        showMessage('Liste hatası: ' + err.message, 'error');
+      }
     }
 
     function renderList() {
@@ -151,8 +266,19 @@
       }
 
       list.innerHTML = filtered.map(book => {
-        const durum = (book.durum || 'RAFTA').toUpperCase();
+        const durum = String(book.durum || 'RAFTA').toUpperCase();
         const statusClass = durum === 'RAFTA' ? 'rafta' : 'oduncte';
+        const borrower = book.oduncAlan || '-';
+        const loanDate = book.oduncTarihi || '-';
+        const returnDate = book.iadeTarihi || '-';
+
+        const loanButton = durum === 'RAFTA'
+          ? `<button class="btn btnLoan" onclick="loanBook(${Number(book.id)})">Ödünç Ver</button>`
+          : `<button class="btn btnLoan btnDisabled" disabled>Ödünçte</button>`;
+
+        const returnButton = durum === 'ÖDÜNÇTE'
+          ? `<button class="btn btnReturn" onclick="returnBook(${Number(book.id)})">İade Al</button>`
+          : `<button class="btn btnReturn btnDisabled" disabled>Rafta</button>`;
 
         return `
           <div class="card">
@@ -161,10 +287,69 @@
             <div class="line"><strong>ISBN:</strong> ${safeHtml(book.isbn || '-')}</div>
             <div class="line"><strong>Yayınevi:</strong> ${safeHtml(book.yayinevi || '-')}</div>
             <div class="line"><strong>Yıl:</strong> ${safeHtml(book.yayinYili || '-')}</div>
+            <div class="line"><strong>Ödünç Alan:</strong> ${safeHtml(borrower)}</div>
+            <div class="line"><strong>Ödünç Tarihi:</strong> ${safeHtml(loanDate)}</div>
+            <div class="line"><strong>İade Tarihi:</strong> ${safeHtml(returnDate)}</div>
             <div class="status ${statusClass}">${safeHtml(durum)}</div>
+            <div class="actions">
+              ${loanButton}
+              ${returnButton}
+            </div>
           </div>
         `;
       }).join('');
+    }
+
+    async function loanBook(id) {
+      clearMessage();
+
+      const borrower = prompt('Kitabı kime veriyorsun?');
+      if (borrower === null) return;
+
+      const cleanBorrower = borrower.trim();
+      if (!cleanBorrower) {
+        showMessage('Ödünç alan kişi adı zorunlu', 'warn');
+        return;
+      }
+
+      try {
+        const result = await apiPost({
+          action: 'loanBook',
+          id,
+          borrower: cleanBorrower
+        });
+
+        if (!result.ok) {
+          showMessage(result.error || 'Ödünç verme hatası', 'error');
+          return;
+        }
+
+        showMessage(result.message || 'Kitap ödünç verildi', 'success');
+        await loadBooks();
+      } catch (err) {
+        showMessage('Ödünç verme hatası: ' + err.message, 'error');
+      }
+    }
+
+    async function returnBook(id) {
+      clearMessage();
+
+      try {
+        const result = await apiPost({
+          action: 'returnBook',
+          id
+        });
+
+        if (!result.ok) {
+          showMessage(result.error || 'İade hatası', 'error');
+          return;
+        }
+
+        showMessage(result.message || 'Kitap iade alındı', 'success');
+        await loadBooks();
+      } catch (err) {
+        showMessage('İade hatası: ' + err.message, 'error');
+      }
     }
 
     loadBooks();
