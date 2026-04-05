@@ -165,12 +165,12 @@
         <option value="gri">Gri</option>
       </select>
 
-      <button class="saveBtn" type="button">Kaydet</button>
+      <button class="saveBtn" type="button" onclick="saveSettings()">Kaydet</button>
 
       <div id="message" class="message"></div>
 
       <div class="muted">
-        Bu sürümde sayfa Worker’dan kullanıcı ayarlarını okumaya hazır hale getirildi.
+        Bu sürümde ayarlar Worker üzerinden okunur ve kaydedilir.
       </div>
     </div>
   </div>
@@ -182,6 +182,10 @@
       const el = document.getElementById('message');
       el.className = 'message ' + type;
       el.textContent = text || '';
+    }
+
+    function normalizeDigits(value) {
+      return String(value || '').replace(/\D/g, '');
     }
 
     function getUserKey() {
@@ -203,6 +207,19 @@
       });
 
       return await response.json();
+    }
+
+    function bindNumericFilters() {
+      const kodHane = document.getElementById('kodHane');
+      const oduncGun = document.getElementById('oduncGun');
+
+      kodHane.addEventListener('input', () => {
+        kodHane.value = normalizeDigits(kodHane.value);
+      });
+
+      oduncGun.addEventListener('input', () => {
+        oduncGun.value = normalizeDigits(oduncGun.value);
+      });
     }
 
     async function loadSettings() {
@@ -231,6 +248,51 @@
       }
     }
 
+    async function saveSettings() {
+      const kodPrefix = document.getElementById('kodPrefix').value.trim();
+      const kodAyrac = document.getElementById('kodAyrac').value.trim();
+      const kodHane = normalizeDigits(document.getElementById('kodHane').value);
+      const oduncGun = normalizeDigits(document.getElementById('oduncGun').value);
+      const tema = document.getElementById('tema').value;
+
+      if (!kodPrefix) {
+        showMessage('Kod Prefix zorunlu', 'error');
+        return;
+      }
+
+      if (!kodHane) {
+        showMessage('Kod Hane zorunlu', 'error');
+        return;
+      }
+
+      if (!oduncGun) {
+        showMessage('Ödünç Gün Sayısı zorunlu', 'error');
+        return;
+      }
+
+      try {
+        const result = await apiPost({
+          action: 'settingsSave',
+          userKey: getUserKey(),
+          kodPrefix: kodPrefix,
+          kodAyrac: kodAyrac,
+          kodHane: Number(kodHane),
+          oduncGunSayisi: Number(oduncGun),
+          tema: tema
+        });
+
+        if (!result.ok) {
+          showMessage(result.error || 'Kaydetme hatası', 'error');
+          return;
+        }
+
+        showMessage(result.message || 'Ayarlar kaydedildi', 'success');
+      } catch (err) {
+        showMessage('Bağlantı hatası: ' + err.message, 'error');
+      }
+    }
+
+    bindNumericFilters();
     loadSettings();
   </script>
 </body>
