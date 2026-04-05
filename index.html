@@ -50,6 +50,11 @@
       box-shadow:0 6px 14px rgba(0,0,0,0.15);
     }
 
+    .gearLink{
+      text-decoration:none;
+      display:block;
+    }
+
     .gearBtn{
       border:none;
       background:white;
@@ -162,7 +167,10 @@
   <div class="app">
     <div class="headerRow">
       <div class="header">📚 Kütüphane Takip</div>
-      <button class="gearBtn" onclick="alert('disli tiklandi')">⚙️</button>
+
+      <a class="gearLink" href="./ayarlar.html?v=1">
+        <button class="gearBtn">⚙️</button>
+      </a>
     </div>
 
     <div class="subInfo">Modüler JS altyapısı aktif</div>
@@ -201,6 +209,5 @@
   <script src="./js/odunc.js"></script>
   <script src="./js/iade.js"></script>
   <script src="./js/sil.js"></script>
-  <script src="./js/ayarlar.js"></script>
 </body>
 </html>
