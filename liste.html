@@ -48,14 +48,12 @@
       background: #F28400;
       color: #fff;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.10);
     }
 
     .toolbar {
       background: #fff;
       border-radius: 18px;
       padding: 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       margin-bottom: 14px;
     }
 
@@ -76,22 +74,17 @@
       background: #fff;
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
 
     .title {
       font-size: 22px;
       font-weight: bold;
       margin-bottom: 8px;
-      line-height: 1.35;
-      word-break: break-word;
     }
 
     .line {
       font-size: 16px;
       margin: 4px 0;
-      line-height: 1.45;
-      word-break: break-word;
     }
 
     .status {
@@ -131,18 +124,9 @@
       width: 100%;
     }
 
-    .btnLoan {
-      background: #0b57d0;
-    }
-
-    .btnReturn {
-      background: #047857;
-    }
-
-    .btnDisabled {
-      background: #9ca3af;
-      cursor: not-allowed;
-    }
+    .btnLoan { background: #0b57d0; }
+    .btnReturn { background: #047857; }
+    .btnDisabled { background: #9ca3af; }
 
     .empty {
       text-align: center;
@@ -151,42 +135,6 @@
       font-size: 18px;
       background: #fff;
       border-radius: 18px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-
-    .message {
-      display: none;
-      margin-bottom: 14px;
-      padding: 16px;
-      border-radius: 14px;
-      font-size: 17px;
-      font-weight: bold;
-      line-height: 1.4;
-      word-break: break-word;
-    }
-
-    .success {
-      display: block;
-      background: #d1fae5;
-      color: #065f46;
-    }
-
-    .error {
-      display: block;
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    .warn {
-      display: block;
-      background: #ffedd5;
-      color: #9a3412;
-    }
-
-    @media (max-width: 640px) {
-      .actions {
-        grid-template-columns: 1fr;
-      }
     }
   </style>
 </head>
@@ -198,185 +146,13 @@
       <button>🏠 Ana Ekrana Dön</button>
     </a>
 
-    <div id="message" class="message"></div>
-
     <div class="toolbar">
-      <input
-        type="text"
-        id="search"
-        placeholder="Kitap adı, yazar veya ISBN ara..."
-        oninput="renderList()"
-      />
+      <input type="text" placeholder="Kitap adı, yazar veya ISBN ara..." />
     </div>
 
-    <div id="list" class="list"></div>
+    <div class="list">
+      <div class="empty">Liste yeni sürüm için hazırlandı</div>
+    </div>
   </div>
-
-  <script>
-    const API_URL = 'https://little-heart-9411.sedasahingultekin.workers.dev';
-    let books = [];
-
-    function safeHtml(text) {
-      return String(text || '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
-
-    function showMessage(text, type = 'success') {
-      const el = document.getElementById('message');
-      el.className = 'message ' + type;
-      el.innerHTML = safeHtml(text);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function clearMessage() {
-      const el = document.getElementById('message');
-      el.className = 'message';
-      el.innerHTML = '';
-    }
-
-    async function apiPost(payload) {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      return await response.json();
-    }
-
-    async function loadBooks() {
-      clearMessage();
-
-      try {
-        const result = await apiPost({
-          action: 'booksList'
-        });
-
-        if (!result.ok) {
-          showMessage(result.error || 'Liste alınamadı', 'error');
-          return;
-        }
-
-        books = result.data || [];
-        renderList();
-      } catch (err) {
-        showMessage('Liste hatası: ' + err.message, 'error');
-      }
-    }
-
-    function renderList() {
-      const q = document.getElementById('search').value.trim().toLowerCase();
-      const list = document.getElementById('list');
-
-      let filtered = books;
-
-      if (q) {
-        filtered = books.filter(book =>
-          (book.kitapAdi || '').toLowerCase().includes(q) ||
-          (book.yazar || '').toLowerCase().includes(q) ||
-          (book.isbn || '').toLowerCase().includes(q)
-        );
-      }
-
-      if (!filtered.length) {
-        list.innerHTML = '<div class="empty">Kayıtlı kitap bulunamadı</div>';
-        return;
-      }
-
-      list.innerHTML = filtered.map(book => {
-        const durum = String(book.durum || 'RAFTA').toUpperCase();
-        const statusClass = durum === 'RAFTA' ? 'rafta' : 'oduncte';
-        const borrower = book.oduncAlan || '-';
-        const loanDate = book.oduncTarihi || '-';
-        const returnDate = book.iadeTarihi || '-';
-
-        const loanButton = durum === 'RAFTA'
-          ? `<button class="btn btnLoan" onclick="loanBook(${Number(book.id)})">Ödünç Ver</button>`
-          : `<button class="btn btnLoan btnDisabled" disabled>Ödünçte</button>`;
-
-        const returnButton = durum === 'ÖDÜNÇTE'
-          ? `<button class="btn btnReturn" onclick="returnBook(${Number(book.id)})">İade Al</button>`
-          : `<button class="btn btnReturn btnDisabled" disabled>Rafta</button>`;
-
-        return `
-          <div class="card">
-            <div class="title">${safeHtml(book.kitapAdi || '-')}</div>
-            <div class="line"><strong>Yazar:</strong> ${safeHtml(book.yazar || '-')}</div>
-            <div class="line"><strong>ISBN:</strong> ${safeHtml(book.isbn || '-')}</div>
-            <div class="line"><strong>Yayınevi:</strong> ${safeHtml(book.yayinevi || '-')}</div>
-            <div class="line"><strong>Yıl:</strong> ${safeHtml(book.yayinYili || '-')}</div>
-            <div class="line"><strong>Ödünç Alan:</strong> ${safeHtml(borrower)}</div>
-            <div class="line"><strong>Ödünç Tarihi:</strong> ${safeHtml(loanDate)}</div>
-            <div class="line"><strong>İade Tarihi:</strong> ${safeHtml(returnDate)}</div>
-            <div class="status ${statusClass}">${safeHtml(durum)}</div>
-            <div class="actions">
-              ${loanButton}
-              ${returnButton}
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    async function loanBook(id) {
-      clearMessage();
-
-      const borrower = prompt('Kitabı kime veriyorsun?');
-      if (borrower === null) return;
-
-      const cleanBorrower = borrower.trim();
-      if (!cleanBorrower) {
-        showMessage('Ödünç alan kişi adı zorunlu', 'warn');
-        return;
-      }
-
-      try {
-        const result = await apiPost({
-          action: 'loanBook',
-          id,
-          borrower: cleanBorrower
-        });
-
-        if (!result.ok) {
-          showMessage(result.error || 'Ödünç verme hatası', 'error');
-          return;
-        }
-
-        showMessage(result.message || 'Kitap ödünç verildi', 'success');
-        await loadBooks();
-      } catch (err) {
-        showMessage('Ödünç verme hatası: ' + err.message, 'error');
-      }
-    }
-
-    async function returnBook(id) {
-      clearMessage();
-
-      try {
-        const result = await apiPost({
-          action: 'returnBook',
-          id
-        });
-
-        if (!result.ok) {
-          showMessage(result.error || 'İade hatası', 'error');
-          return;
-        }
-
-        showMessage(result.message || 'Kitap iade alındı', 'success');
-        await loadBooks();
-      } catch (err) {
-        showMessage('İade hatası: ' + err.message, 'error');
-      }
-    }
-
-    loadBooks();
-  </script>
 </body>
 </html>
