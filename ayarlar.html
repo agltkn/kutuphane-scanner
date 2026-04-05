@@ -3,9 +3,152 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <title>Ayarlar</title>
+  <title>Kütüphane Ayarlar</title>
+  <style>
+    *{
+      box-sizing:border-box;
+      margin:0;
+      padding:0;
+    }
+
+    html, body{
+      width:100%;
+      max-width:100%;
+      overflow-x:hidden;
+      font-family:Arial,sans-serif;
+      background:linear-gradient(180deg,#f7f7f7 0%,#ececec 100%);
+      color:#222;
+    }
+
+    body{
+      padding:14px;
+    }
+
+    .app{
+      max-width:900px;
+      margin:0 auto;
+    }
+
+    .header{
+      background:#111;
+      color:#fff;
+      padding:18px;
+      border-radius:18px;
+      font-size:28px;
+      font-weight:bold;
+      text-align:center;
+      margin-bottom:14px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.12);
+    }
+
+    .homeBtn{
+      display:block;
+      width:100%;
+      text-decoration:none;
+      margin-bottom:14px;
+    }
+
+    .homeBtn button{
+      width:100%;
+      border:none;
+      border-radius:18px;
+      padding:18px;
+      font-size:22px;
+      font-weight:bold;
+      background:#F28400;
+      color:#fff;
+      cursor:pointer;
+      box-shadow:0 4px 12px rgba(0,0,0,0.10);
+    }
+
+    .card{
+      background:#fff;
+      border-radius:22px;
+      padding:20px;
+      box-shadow:0 6px 16px rgba(0,0,0,0.10);
+    }
+
+    .title{
+      font-size:28px;
+      font-weight:bold;
+      text-align:center;
+      margin-bottom:18px;
+    }
+
+    .label{
+      display:block;
+      font-size:18px;
+      font-weight:bold;
+      margin:14px 0 8px;
+    }
+
+    input, select{
+      width:100%;
+      padding:16px;
+      font-size:16px;
+      border:1px solid #ccc;
+      border-radius:14px;
+      background:#fff;
+    }
+
+    .saveBtn{
+      width:100%;
+      border:none;
+      border-radius:14px;
+      padding:18px;
+      font-size:22px;
+      font-weight:bold;
+      background:#111;
+      color:#fff;
+      cursor:pointer;
+      margin-top:18px;
+    }
+
+    .note{
+      margin-top:14px;
+      font-size:14px;
+      color:#666;
+      line-height:1.5;
+      text-align:center;
+    }
+  </style>
 </head>
 <body>
-  <h1>Ayarlar sayfası hazır</h1>
+  <div class="app">
+    <div class="header">⚙️ Ayarlar</div>
+
+    <a class="homeBtn" href="./?v=27">
+      <button>🏠 Ana Ekrana Dön</button>
+    </a>
+
+    <div class="card">
+      <div class="title">Kullanıcı Ayarları</div>
+
+      <label class="label">Kod Prefix</label>
+      <input type="text" id="kodPrefix" placeholder="Örn: KTP" />
+
+      <label class="label">Kod Ayraç</label>
+      <input type="text" id="kodAyrac" placeholder="Örn: -" />
+
+      <label class="label">Kod Hane</label>
+      <input type="number" id="kodHane" placeholder="Örn: 4" />
+
+      <label class="label">Ödünç Gün Sayısı</label>
+      <input type="number" id="oduncGun" placeholder="Örn: 15" />
+
+      <label class="label">Tema</label>
+      <select id="tema">
+        <option value="acik">Açık</option>
+        <option value="koyu">Koyu</option>
+        <option value="gri">Gri</option>
+      </select>
+
+      <button class="saveBtn">Kaydet</button>
+
+      <div class="note">
+        Şimdilik ekran hazırlandı. Bir sonraki adımda bu alanları kullanıcıya özel olarak kaydedeceğiz.
+      </div>
+    </div>
+  </div>
 </body>
 </html>
