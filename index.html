@@ -17,6 +17,8 @@
       overflow-x:hidden;
       font-family:Arial,sans-serif;
       background:linear-gradient(180deg,#f7f7f7 0%,#ececec 100%);
+      -webkit-text-size-adjust:100%;
+      touch-action:manipulation;
     }
 
     body{
@@ -48,12 +50,13 @@
       margin-bottom:18px;
       font-size:16px;
       color:#444;
+      box-shadow:0 3px 10px rgba(0,0,0,0.06);
     }
 
     .grid{
       width:100%;
       display:grid;
-      grid-template-columns:repeat(2,1fr);
+      grid-template-columns:repeat(2,minmax(0,1fr));
       gap:14px;
     }
 
@@ -77,6 +80,12 @@
     .icon{
       font-size:80px;
       margin-bottom:8px;
+      line-height:1;
+    }
+
+    .menuText{
+      text-align:center;
+      line-height:1.2;
     }
 
     .listBtn{
@@ -90,6 +99,7 @@
       font-size:28px;
       font-weight:bold;
       cursor:pointer;
+      box-shadow:0 6px 14px rgba(0,0,0,0.18);
     }
 
     .linkLike{
@@ -101,6 +111,20 @@
     #formAlani{
       margin-top:18px;
     }
+
+    @media (max-width:640px){
+      .icon{
+        font-size:72px;
+      }
+
+      .menuBtn{
+        font-size:20px;
+      }
+
+      .listBtn{
+        font-size:24px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -111,22 +135,22 @@
     <div class="grid">
       <button class="menuBtn" onclick="ekleForm()">
         <div class="icon">➕</div>
-        <div>Kitap Ekle</div>
+        <div class="menuText">Kitap Ekle</div>
       </button>
 
-      <button class="menuBtn">
+      <button class="menuBtn" onclick="oduncVerForm()">
         <div class="icon">📤</div>
-        <div>Ödünç Ver</div>
+        <div class="menuText">Ödünç Ver</div>
       </button>
 
-      <button class="menuBtn">
+      <button class="menuBtn" onclick="iadeForm()">
         <div class="icon">📥</div>
-        <div>İade Al</div>
+        <div class="menuText">İade Al</div>
       </button>
 
-      <button class="menuBtn">
+      <button class="menuBtn" onclick="silForm()">
         <div class="icon">🗑️</div>
-        <div>Kitap Sil</div>
+        <div class="menuText">Kitap Sil</div>
       </button>
     </div>
 
@@ -139,5 +163,8 @@
 
   <script src="./js/api.js"></script>
   <script src="./js/ekle.js"></script>
+  <script src="./js/odunc.js"></script>
+  <script src="./js/iade.js"></script>
+  <script src="./js/sil.js"></script>
 </body>
 </html>
