@@ -1,395 +1,214 @@
-function iadeTemizMesaj() {
-  const kutu = document.getElementById('mesajKutusu');
-  if (!kutu) return;
-  kutu.className = 'mesajKutusu';
-  kutu.innerHTML = '';
-}
-
-function iadeMesajGoster(mesaj, tip = 'success') {
-  const kutu = document.getElementById('mesajKutusu');
-  if (!kutu) return;
-  kutu.className = 'mesajKutusu mesaj-' + tip;
-  kutu.innerHTML = guvenliYazi(mesaj);
-}
-
-function iadeKitapKartHtml(kitap) {
-  const durum = String(kitap.durum || 'RAFTA').toUpperCase();
-  const badgeClass = durum === 'ÖDÜNÇTE' ? 'oduncte' : 'rafta';
-
-  return `
-    <div class="kitapKart">
-      <div class="kitapBaslik">${guvenliYazi(kitap.kitapAdi || '-')}</div>
-      <div class="kitapSatir"><strong>Kitap Kodu:</strong> ${guvenliYazi(kitap.kitapKodu || '-')}</div>
-      <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(kitap.yazar || '-')}</div>
-      <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(kitap.isbn || '-')}</div>
-      <div class="kitapSatir"><strong>Yayınevi:</strong> ${guvenliYazi(kitap.yayinevi || '-')}</div>
-      <div class="kitapSatir"><strong>Yıl:</strong> ${guvenliYazi(kitap.yayinYili || '-')}</div>
-      <div class="kitapSatir"><strong>Ödünç Alan:</strong> ${guvenliYazi(kitap.oduncAlan || '-')}</div>
-      <div class="kitapSatir"><strong>Ödünç Tarihi:</strong> ${guvenliYazi(kitap.oduncTarihi || '-')}</div>
-      <div class="kitapSatir"><strong>İade Tarihi:</strong> ${guvenliYazi(kitap.iadeTarihi || '-')}</div>
-      <div class="durumBadge ${badgeClass}">${guvenliYazi(durum)}</div>
-    </div>
-  `;
-}
-
-async function iadeApiPost(payload) {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return await response.json();
-}
-
-async function iadeTumKitaplariGetir() {
-  const sonuc = await iadeApiPost({ action: 'booksList' });
-  if (!sonuc.ok) {
-    throw new Error(sonuc.error || 'Kitap listesi alınamadı');
-  }
-  return sonuc.data || [];
-}
-
-async function kameraKapatIade() {
-  try {
-    if (window.qrReader) {
-      try { await window.qrReader.stop(); } catch (e) {}
-      try { await window.qrReader.clear(); } catch (e) {}
-      window.qrReader = null;
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Kütüphane Takip</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    *{
+      box-sizing:border-box;
+      margin:0;
+      padding:0;
     }
 
-    const wrap = document.getElementById('scannerWrap');
-    const reader = document.getElementById('reader');
+    html, body{
+      width:100%;
+      max-width:100%;
+      overflow-x:hidden;
+      font-family:Arial,sans-serif;
+      background:linear-gradient(180deg,#f7f7f7 0%,#ececec 100%);
+      -webkit-text-size-adjust:100%;
+      touch-action:manipulation;
+    }
 
-    if (wrap) wrap.style.display = 'none';
-    if (reader) reader.innerHTML = '';
-    window.sonOkunanKod = '';
-  } catch (err) {}
-}
+    body{
+      padding:14px;
+    }
 
-async function kamerayiBaslatIade() {
-  iadeTemizMesaj();
-  await kameraKapatIade();
+    .app{
+      width:100%;
+      max-width:100vw;
+      margin:0 auto;
+    }
 
-  if (typeof Html5Qrcode === 'undefined') {
-    iadeMesajGoster('Kamera modülü yüklenemedi', 'error');
-    return;
-  }
+    .headerRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom:14px;
+    }
 
-  const wrap = document.getElementById('scannerWrap');
-  const reader = document.getElementById('reader');
+    .header{
+      flex:1;
+      background:#F28400;
+      color:white;
+      padding:20px;
+      border-radius:20px;
+      font-size:28px;
+      font-weight:bold;
+      text-align:center;
+      box-shadow:0 6px 14px rgba(0,0,0,0.15);
+    }
 
-  if (!wrap || !reader) {
-    iadeMesajGoster('Kamera alanı bulunamadı', 'error');
-    return;
-  }
+    .gearLink{
+      text-decoration:none;
+      display:block;
+    }
 
-  try {
-    wrap.style.display = 'block';
-    reader.innerHTML = '';
-    window.qrReader = new Html5Qrcode('reader');
-    window.sonOkunanKod = '';
+    .gearBtn{
+      border:none;
+      background:white;
+      border-radius:16px;
+      width:64px;
+      min-width:64px;
+      height:64px;
+      font-size:30px;
+      cursor:pointer;
+      box-shadow:0 4px 12px rgba(0,0,0,0.10);
+    }
 
-    await window.qrReader.start(
-      { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 120 }
-      },
-      async (decodedText) => {
-        const isbn = temizIsbn(decodedText);
-        if (!isbn) return;
-        if (isbn === window.sonOkunanKod) return;
+    .subInfo{
+      background:#fff;
+      border-radius:14px;
+      padding:12px 14px;
+      margin-bottom:18px;
+      font-size:16px;
+      color:#444;
+      box-shadow:0 3px 10px rgba(0,0,0,0.06);
+    }
 
-        window.sonOkunanKod = isbn;
+    .grid{
+      width:100%;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+    }
 
-        const isbnInput = document.getElementById('iadeIsbn');
-        if (isbnInput) isbnInput.value = isbn;
+    .menuBtn{
+      width:100%;
+      aspect-ratio:1/1;
+      border:none;
+      border-radius:22px;
+      background:white;
+      color:#333;
+      font-size:22px;
+      font-weight:bold;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      box-shadow:0 6px 14px rgba(0,0,0,0.12);
+      cursor:pointer;
+    }
 
-        iadeMesajGoster('ISBN okundu: ' + isbn, 'success');
-        await kameraKapatIade();
-        await iadeKitapBul();
-      }
-    );
-  } catch (err) {
-    await kameraKapatIade();
-    iadeMesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
-  }
-}
+    .icon{
+      font-size:80px;
+      margin-bottom:8px;
+      line-height:1;
+    }
 
-function iadeForm() {
-  window.seciliIadeKitap = null;
+    .menuText{
+      text-align:center;
+      line-height:1.2;
+    }
 
-  const alan = document.getElementById('formAlani');
-  if (!alan) return;
+    .listBtn{
+      width:100%;
+      margin-top:16px;
+      padding:24px;
+      border:none;
+      border-radius:22px;
+      background:#2d3748;
+      color:white;
+      font-size:28px;
+      font-weight:bold;
+      cursor:pointer;
+      box-shadow:0 6px 14px rgba(0,0,0,0.18);
+    }
 
-  alan.innerHTML = `
-    <style>
-      .formCard{
-        background:#fff;
-        border-radius:22px;
-        padding:20px;
-        box-shadow:0 6px 16px rgba(0,0,0,0.10);
-      }
+    .linkLike{
+      display:block;
+      width:100%;
+      text-decoration:none;
+    }
 
-      .formTitle{
-        font-size:28px;
-        font-weight:bold;
-        text-align:center;
-        margin-bottom:18px;
-        color:#222;
-      }
+    #formAlani{
+      margin-top:18px;
+    }
 
-      .topActions{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:10px;
-        margin-top:10px;
-      }
-
-      .actionBtn{
-        width:100%;
-        padding:18px;
-        margin-top:18px;
-        font-size:22px;
-        border:none;
-        border-radius:14px;
-        background:#111;
-        color:white;
-        font-weight:bold;
-        cursor:pointer;
-      }
-
-      .blueBtn{ background:#0b57d0; }
-      .greenBtn{ background:#047857; }
-      .grayBtn{ background:#6b7280; }
-      .secondaryBtn{ background:#444; }
-
-      .formLabel{
-        display:block;
-        font-size:18px;
-        font-weight:bold;
-        margin:16px 0 8px 0;
-        color:#333;
-      }
-
-      .formInput{
-        width:100%;
-        padding:16px;
-        font-size:16px;
-        border:1px solid #ccc;
-        border-radius:14px;
-        background:white;
-      }
-
-      .scannerWrap{
-        display:none;
-        margin-top:16px;
-        border-radius:18px;
-        overflow:hidden;
-        background:#111;
-        padding:10px;
-      }
-
-      #reader{
-        width:100%;
-        min-height:260px;
-        border-radius:12px;
-        overflow:hidden;
-        background:#000;
-      }
-
-      .scanHelp{
-        margin-top:10px;
-        color:#fff;
-        background:rgba(255,255,255,0.08);
-        padding:10px 12px;
-        border-radius:12px;
-        font-size:14px;
-        line-height:1.4;
-      }
-
-      .kitapKart{
-        margin-top:18px;
-        background:#fff7ed;
-        border:2px solid #fdba74;
-        border-radius:16px;
-        padding:18px;
-        overflow:hidden;
-      }
-
-      .kitapBaslik{
+    @media (max-width:640px){
+      .header{
         font-size:24px;
-        font-weight:bold;
-        color:#222;
-        margin-bottom:10px;
-        word-break:break-word;
+        padding:18px;
       }
 
-      .kitapSatir{
-        font-size:17px;
-        color:#444;
-        margin:6px 0;
-        line-height:1.4;
-        word-break:break-word;
+      .gearBtn{
+        width:58px;
+        min-width:58px;
+        height:58px;
+        font-size:28px;
       }
 
-      .durumBadge{
-        display:inline-block;
-        padding:8px 14px;
-        border-radius:999px;
-        font-size:15px;
-        font-weight:bold;
-        margin-top:8px;
+      .icon{
+        font-size:72px;
       }
 
-      .rafta{
-        background:#d1fae5;
-        color:#065f46;
+      .menuBtn{
+        font-size:20px;
       }
 
-      .oduncte{
-        background:#fee2e2;
-        color:#991b1b;
+      .listBtn{
+        font-size:24px;
       }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="headerRow">
+      <div class="header">📚 Kütüphane Takip</div>
 
-      .mesajKutusu{
-        display:none;
-        margin-top:18px;
-        padding:16px 18px;
-        border-radius:14px;
-        font-size:18px;
-        font-weight:bold;
-        line-height:1.5;
-        word-break:break-word;
-      }
-
-      .mesaj-success{
-        display:block;
-        background:#d1fae5;
-        color:#065f46;
-      }
-
-      .mesaj-error{
-        display:block;
-        background:#fee2e2;
-        color:#991b1b;
-      }
-
-      .mesaj-warn{
-        display:block;
-        background:#ffedd5;
-        color:#9a3412;
-      }
-
-      @media (max-width:640px){
-        .topActions{
-          grid-template-columns:1fr;
-        }
-      }
-    </style>
-
-    <div class="formCard">
-      <div class="formTitle">📥 İade Al</div>
-
-      <div class="topActions">
-        <button class="actionBtn blueBtn" onclick="kamerayiBaslatIade()">📷 Kamera ile ISBN Okut</button>
-        <button class="actionBtn grayBtn" onclick="kameraKapatIade()">Kamerayı Kapat</button>
-      </div>
-
-      <div id="scannerWrap" class="scannerWrap">
-        <div id="reader"></div>
-        <div class="scanHelp">Barkodu kutuya ortalayın</div>
-      </div>
-
-      <label class="formLabel">ISBN</label>
-      <input class="formInput" type="text" id="iadeIsbn" placeholder="ISBN yazın veya okutun">
-
-      <button class="actionBtn secondaryBtn" onclick="iadeKitapBul()">Kitabı Bul</button>
-
-      <div id="iadeKitapAlani"></div>
-
-      <button class="actionBtn greenBtn" onclick="iadeAl()">İade Al</button>
-
-      <div id="mesajKutusu" class="mesajKutusu"></div>
+      <a class="gearLink" href="./ayarlar.html?v=34">
+        <button class="gearBtn" type="button">⚙️</button>
+      </a>
     </div>
-  `;
 
-  setTimeout(() => {
-    alan.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 100);
-}
+    <div class="subInfo">Modüler JS altyapısı aktif</div>
 
-async function iadeKitapBul(suppressStatusMessage = false) {
-  iadeTemizMesaj();
-  window.seciliIadeKitap = null;
+    <div class="grid">
+      <button class="menuBtn" type="button" onclick="ekleForm()">
+        <div class="icon">➕</div>
+        <div class="menuText">Kitap Ekle</div>
+      </button>
 
-  const alan = document.getElementById('iadeKitapAlani');
-  if (alan) alan.innerHTML = '';
+      <button class="menuBtn" type="button" onclick="oduncVerForm()">
+        <div class="icon">📤</div>
+        <div class="menuText">Ödünç Ver</div>
+      </button>
 
-  try {
-    const isbn = temizIsbn(document.getElementById('iadeIsbn')?.value || '');
-    if (!isbn) {
-      iadeMesajGoster('Önce ISBN girin veya okutun', 'warn');
-      return;
-    }
+      <button class="menuBtn" type="button" onclick="iadeForm()">
+        <div class="icon">📥</div>
+        <div class="menuText">İade Al</div>
+      </button>
 
-    const kitaplar = await iadeTumKitaplariGetir();
-    const kitap = kitaplar.find(k => temizIsbn(k.isbn || '') === isbn);
+      <button class="menuBtn" type="button" onclick="silForm()">
+        <div class="icon">🗑️</div>
+        <div class="menuText">Kitap Sil</div>
+      </button>
+    </div>
 
-    if (!kitap) {
-      iadeMesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
-      return;
-    }
+    <a class="linkLike" href="./liste.html?v=34">
+      <button class="listBtn" type="button">📚<br>Kitap Listesi</button>
+    </a>
 
-    window.seciliIadeKitap = kitap;
+    <div id="formAlani"></div>
+  </div>
 
-    if (alan) alan.innerHTML = iadeKitapKartHtml(kitap);
-
-    if (suppressStatusMessage) {
-      return;
-    }
-
-    if (String(kitap.durum || '').toUpperCase() !== 'ÖDÜNÇTE') {
-      iadeMesajGoster('Bu kitap zaten rafta', 'warn');
-    } else {
-      iadeMesajGoster('Kitap bulundu', 'success');
-    }
-  } catch (err) {
-    iadeMesajGoster('Arama hatası: ' + err.message, 'error');
-  }
-}
-
-async function iadeAl() {
-  iadeTemizMesaj();
-
-  const kitap = window.seciliIadeKitap;
-  if (!kitap) {
-    iadeMesajGoster('Önce kitabı bulun', 'warn');
-    return;
-  }
-
-  if (String(kitap.durum || '').toUpperCase() !== 'ÖDÜNÇTE') {
-    iadeMesajGoster('Bu kitap zaten rafta', 'warn');
-    return;
-  }
-
-  try {
-    const sonuc = await iadeApiPost({
-      action: 'returnBook',
-      id: kitap.id
-    });
-
-    if (!sonuc.ok) {
-      iadeMesajGoster(sonuc.error || 'İade alma hatası', 'error');
-      return;
-    }
-
-    await iadeKitapBul(true);
-    iadeMesajGoster(sonuc.message || 'Kitap iade alındı', 'success');
-  } catch (err) {
-    iadeMesajGoster('İade alma hatası: ' + err.message, 'error');
-  }
-}
+  <script src="./js/api.js?v=34"></script>
+  <script src="./js/ekle.js?v=34"></script>
+  <script src="./js/odunc.js?v=34"></script>
+  <script src="./js/iade.js?v=34"></script>
+  <script src="./js/sil.js?v=34"></script>
+</body>
+</html>
