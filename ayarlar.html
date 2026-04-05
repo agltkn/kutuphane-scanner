@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <title>Kütüphane Ayarlar</title>
   <style>
+    :root{
+      --bg1:#f7f7f7;
+      --bg2:#ececec;
+      --text:#222;
+      --card:#ffffff;
+      --header:#111111;
+      --headerText:#ffffff;
+      --border:#cccccc;
+      --btn:#111111;
+      --btnText:#ffffff;
+    }
+
     *{
       box-sizing:border-box;
       margin:0;
@@ -16,12 +28,14 @@
       max-width:100%;
       overflow-x:hidden;
       font-family:Arial,sans-serif;
-      background:linear-gradient(180deg,#f7f7f7 0%,#ececec 100%);
-      color:#222;
+      background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%);
+      color:var(--text);
+      transition:all .25s ease;
     }
 
     body{
       padding:14px;
+      min-height:100vh;
     }
 
     .app{
@@ -30,8 +44,8 @@
     }
 
     .header{
-      background:#111;
-      color:#fff;
+      background:var(--header);
+      color:var(--headerText);
       padding:18px;
       border-radius:18px;
       font-size:28px;
@@ -62,7 +76,7 @@
     }
 
     .card{
-      background:#fff;
+      background:var(--card);
       border-radius:22px;
       padding:20px;
       box-shadow:0 6px 16px rgba(0,0,0,0.10);
@@ -86,9 +100,10 @@
       width:100%;
       padding:16px;
       font-size:16px;
-      border:1px solid #ccc;
+      border:1px solid var(--border);
       border-radius:14px;
-      background:#fff;
+      background:var(--card);
+      color:var(--text);
     }
 
     .saveBtn{
@@ -98,8 +113,8 @@
       padding:18px;
       font-size:22px;
       font-weight:bold;
-      background:#111;
-      color:#fff;
+      background:var(--btn);
+      color:var(--btnText);
       cursor:pointer;
       margin-top:18px;
     }
@@ -147,16 +162,16 @@
       <div class="title">Kullanıcı Ayarları</div>
 
       <label class="label">Kod Prefix</label>
-      <input type="text" id="kodPrefix" placeholder="Örn: KTP" />
+      <input type="text" id="kodPrefix" />
 
       <label class="label">Kod Ayraç</label>
-      <input type="text" id="kodAyrac" placeholder="Örn: -" />
+      <input type="text" id="kodAyrac" />
 
       <label class="label">Kod Hane</label>
-      <input type="number" id="kodHane" inputmode="numeric" pattern="[0-9]*" placeholder="Örn: 4" />
+      <input type="number" id="kodHane" inputmode="numeric" pattern="[0-9]*" />
 
       <label class="label">Ödünç Gün Sayısı</label>
-      <input type="number" id="oduncGun" inputmode="numeric" pattern="[0-9]*" placeholder="Örn: 15" />
+      <input type="number" id="oduncGun" inputmode="numeric" pattern="[0-9]*" />
 
       <label class="label">Tema</label>
       <select id="tema">
@@ -170,7 +185,7 @@
       <div id="message" class="message"></div>
 
       <div class="muted">
-        Bu sürümde ayarlar Worker üzerinden okunur ve kaydedilir.
+        Tema seçimi artık sayfaya uygulanır.
       </div>
     </div>
   </div>
@@ -197,6 +212,42 @@
       return key;
     }
 
+    function applyTheme(tema) {
+      const root = document.documentElement;
+
+      if (tema === 'koyu') {
+        root.style.setProperty('--bg1', '#1f2937');
+        root.style.setProperty('--bg2', '#111827');
+        root.style.setProperty('--text', '#f9fafb');
+        root.style.setProperty('--card', '#374151');
+        root.style.setProperty('--header', '#000000');
+        root.style.setProperty('--headerText', '#ffffff');
+        root.style.setProperty('--border', '#4b5563');
+        root.style.setProperty('--btn', '#000000');
+        root.style.setProperty('--btnText', '#ffffff');
+      } else if (tema === 'gri') {
+        root.style.setProperty('--bg1', '#d1d5db');
+        root.style.setProperty('--bg2', '#9ca3af');
+        root.style.setProperty('--text', '#111827');
+        root.style.setProperty('--card', '#f3f4f6');
+        root.style.setProperty('--header', '#6b7280');
+        root.style.setProperty('--headerText', '#ffffff');
+        root.style.setProperty('--border', '#9ca3af');
+        root.style.setProperty('--btn', '#4b5563');
+        root.style.setProperty('--btnText', '#ffffff');
+      } else {
+        root.style.setProperty('--bg1', '#f7f7f7');
+        root.style.setProperty('--bg2', '#ececec');
+        root.style.setProperty('--text', '#222');
+        root.style.setProperty('--card', '#ffffff');
+        root.style.setProperty('--header', '#111111');
+        root.style.setProperty('--headerText', '#ffffff');
+        root.style.setProperty('--border', '#cccccc');
+        root.style.setProperty('--btn', '#111111');
+        root.style.setProperty('--btnText', '#ffffff');
+      }
+    }
+
     async function apiPost(payload) {
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -212,6 +263,7 @@
     function bindNumericFilters() {
       const kodHane = document.getElementById('kodHane');
       const oduncGun = document.getElementById('oduncGun');
+      const tema = document.getElementById('tema');
 
       kodHane.addEventListener('input', () => {
         kodHane.value = normalizeDigits(kodHane.value);
@@ -219,6 +271,10 @@
 
       oduncGun.addEventListener('input', () => {
         oduncGun.value = normalizeDigits(oduncGun.value);
+      });
+
+      tema.addEventListener('change', () => {
+        applyTheme(tema.value);
       });
     }
 
@@ -242,6 +298,7 @@
         document.getElementById('oduncGun').value = data.oduncGunSayisi || 15;
         document.getElementById('tema').value = data.tema || 'acik';
 
+        applyTheme(data.tema || 'acik');
         showMessage('Ayarlar yüklendi', 'success');
       } catch (err) {
         showMessage('Bağlantı hatası: ' + err.message, 'error');
@@ -255,18 +312,8 @@
       const oduncGun = normalizeDigits(document.getElementById('oduncGun').value);
       const tema = document.getElementById('tema').value;
 
-      if (!kodPrefix) {
-        showMessage('Kod Prefix zorunlu', 'error');
-        return;
-      }
-
-      if (!kodHane) {
-        showMessage('Kod Hane zorunlu', 'error');
-        return;
-      }
-
-      if (!oduncGun) {
-        showMessage('Ödünç Gün Sayısı zorunlu', 'error');
+      if (!kodPrefix || !kodHane || !oduncGun) {
+        showMessage('Zorunlu alanları doldur', 'error');
         return;
       }
 
@@ -274,11 +321,11 @@
         const result = await apiPost({
           action: 'settingsSave',
           userKey: getUserKey(),
-          kodPrefix: kodPrefix,
-          kodAyrac: kodAyrac,
+          kodPrefix,
+          kodAyrac,
           kodHane: Number(kodHane),
           oduncGunSayisi: Number(oduncGun),
-          tema: tema
+          tema
         });
 
         if (!result.ok) {
@@ -286,6 +333,7 @@
           return;
         }
 
+        applyTheme(tema);
         showMessage(result.message || 'Ayarlar kaydedildi', 'success');
       } catch (err) {
         showMessage('Bağlantı hatası: ' + err.message, 'error');
