@@ -2,11 +2,12 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <title>Kütüphane ISBN Tarayıcı</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Kütüphane Takip</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -14,10 +15,12 @@
       color: #222;
       padding: 14px;
     }
+
     .app {
-      max-width: 760px;
+      max-width: 860px;
       margin: 0 auto;
     }
+
     .header {
       background: #F28400;
       color: #fff;
@@ -29,26 +32,82 @@
       box-shadow: 0 6px 14px rgba(0,0,0,0.15);
       margin-bottom: 14px;
     }
-    .card {
+
+    .subInfo {
       background: #fff;
-      border-radius: 20px;
-      padding: 18px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.10);
-      margin-bottom: 14px;
-    }
-    .title {
-      font-size: 24px;
-      font-weight: bold;
-      margin-bottom: 14px;
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 15px;
+      color: #444;
+      line-height: 1.5;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       text-align: center;
     }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .menuBtn {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border: none;
+      border-radius: 22px;
+      background: #fff;
+      color: #333;
+      font-size: clamp(18px, 4.8vw, 24px);
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+      padding: 10px;
+      cursor: pointer;
+    }
+
+    .icon {
+      font-size: clamp(64px, 18vw, 96px);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .menuText {
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .panel {
+      display: none;
+      margin-top: 18px;
+      background: #fff;
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .panelTitle {
+      font-size: 26px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
     .label {
       display: block;
       font-size: 18px;
       font-weight: bold;
       margin: 14px 0 8px;
     }
-    input, textarea {
+
+    input {
       width: 100%;
       padding: 16px;
       font-size: 16px;
@@ -56,21 +115,7 @@
       border-radius: 14px;
       background: #fff;
     }
-    textarea {
-      min-height: 110px;
-      resize: vertical;
-    }
-    .row2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    .rowIsbn {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      align-items: stretch;
-    }
+
     .btn {
       width: 100%;
       border: none;
@@ -82,24 +127,19 @@
       cursor: pointer;
       margin-top: 14px;
     }
-    .btnPrimary { background: #111; }
+
     .btnBlue { background: #0b57d0; }
     .btnGray { background: #6b7280; }
     .btnGreen { background: #047857; }
-    .btnInline {
-      width: auto;
-      min-width: 150px;
-      margin-top: 0;
-      padding: 16px 18px;
-      font-size: 18px;
-      align-self: stretch;
-    }
+    .btnDark { background: #111; }
+
     .miniButtons {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
       margin-top: 10px;
     }
+
     .scannerWrap {
       display: none;
       margin-top: 16px;
@@ -108,6 +148,7 @@
       background: #111;
       padding: 10px;
     }
+
     #reader {
       width: 100%;
       min-height: 260px;
@@ -115,6 +156,7 @@
       overflow: hidden;
       background: #000;
     }
+
     .scanHelp {
       margin-top: 10px;
       color: #fff;
@@ -124,6 +166,7 @@
       font-size: 14px;
       line-height: 1.4;
     }
+
     .message {
       display: none;
       margin-top: 14px;
@@ -134,72 +177,124 @@
       line-height: 1.4;
       word-break: break-word;
     }
+
     .success {
       display: block;
       background: #d1fae5;
       color: #065f46;
     }
+
     .error {
       display: block;
       background: #fee2e2;
       color: #991b1b;
     }
+
     .warn {
       display: block;
       background: #ffedd5;
       color: #9a3412;
     }
-    .previewCard {
+
+    .bookCard {
       margin-top: 16px;
       padding: 16px;
       border-radius: 16px;
       border: 1px solid #e5e7eb;
       background: #f9fafb;
     }
-    .previewCover {
-      width: 95px;
-      height: auto;
-      display: block;
-      border-radius: 12px;
-      border: 1px solid #ddd;
-      margin-bottom: 12px;
-      background: #fff;
+
+    .bookTitle {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      line-height: 1.35;
     }
+
     .line {
       font-size: 17px;
       line-height: 1.45;
       margin: 6px 0;
       word-break: break-word;
     }
-    .bookTitle {
-      font-size: 24px;
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-    .muted {
-      color: #666;
+
+    .status {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
       font-size: 14px;
-      margin-top: 8px;
+      font-weight: bold;
     }
+
+    .rafta {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .oduncte {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .backBtn {
+      margin-top: 10px;
+    }
+
+    .linkBtn {
+      text-decoration: none;
+      display: block;
+    }
+
     @media (max-width: 640px) {
-      .row2 { grid-template-columns: 1fr; }
-      .rowIsbn { grid-template-columns: 1fr; }
-      .btnInline {
-        width: 100%;
-        min-width: 0;
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .miniButtons {
+        grid-template-columns: 1fr;
       }
     }
   </style>
 </head>
 <body>
   <div class="app">
-    <div class="header">📷 Kütüphane ISBN Tarayıcı</div>
+    <div class="header">📚 Kütüphane Takip</div>
+    <div class="subInfo">Ana operasyon ekranı</div>
 
-    <div class="card">
-      <div class="title">ISBN Okut / Sorgula / Kaydet</div>
+    <div id="homeScreen">
+      <div class="grid">
+        <a class="linkBtn" href="./scanner.html?v=10">
+          <button class="menuBtn">
+            <div class="icon">➕</div>
+            <div class="menuText">Kitap Ekle</div>
+          </button>
+        </a>
+
+        <button class="menuBtn" onclick="openPanel('loanPanel')">
+          <div class="icon">📕</div>
+          <div class="menuText">Ödünç Ver</div>
+        </button>
+
+        <button class="menuBtn" onclick="openPanel('returnPanel')">
+          <div class="icon">📗</div>
+          <div class="menuText">İade Al</div>
+        </button>
+
+        <a class="linkBtn" href="./liste.html?v=10">
+          <button class="menuBtn">
+            <div class="icon">📚</div>
+            <div class="menuText">Kitap Listesi</div>
+          </button>
+        </a>
+      </div>
+    </div>
+
+    <div id="loanPanel" class="panel">
+      <div class="panelTitle">📕 Ödünç Ver</div>
 
       <div class="miniButtons">
-        <button class="btn btnBlue" onclick="startScanner()">Kamera ile ISBN Okut</button>
+        <button class="btn btnBlue" onclick="startScanner('loan')">Kamera ile ISBN Okut</button>
         <button class="btn btnGray" onclick="stopScanner()">Kamerayı Kapat</button>
       </div>
 
@@ -211,37 +306,47 @@
       </div>
 
       <label class="label">ISBN</label>
-      <div class="rowIsbn">
-        <input type="text" id="isbn" placeholder="ISBN yazın veya okutun" oninput="isbnChanged()" />
-        <button class="btn btnPrimary btnInline" onclick="lookupIsbn()">ISBN'den Doldur</button>
+      <input type="text" id="loanIsbn" placeholder="ISBN yazın veya okutun" />
+
+      <button class="btn btnDark" onclick="findBookForLoan()">Kitabı Bul</button>
+
+      <div id="loanBookArea"></div>
+
+      <label class="label">Kime Verildi</label>
+      <input type="text" id="borrowerName" placeholder="Ad Soyad" />
+
+      <button class="btn btnGreen" onclick="confirmLoan()">Ödünç Ver</button>
+      <button class="btn btnGray backBtn" onclick="goHome()">Ana Ekran</button>
+
+      <div id="loanMessage" class="message"></div>
+    </div>
+
+    <div id="returnPanel" class="panel">
+      <div class="panelTitle">📗 İade Al</div>
+
+      <div class="miniButtons">
+        <button class="btn btnBlue" onclick="startScanner('return')">Kamera ile ISBN Okut</button>
+        <button class="btn btnGray" onclick="stopScanner()">Kamerayı Kapat</button>
       </div>
 
-      <div id="preview"></div>
-
-      <label class="label">Kitap Adı</label>
-      <input type="text" id="kitapAdi" placeholder="Kitap adı" />
-
-      <label class="label">Yazar</label>
-      <input type="text" id="yazar" placeholder="Yazar" />
-
-      <div class="row2">
-        <div>
-          <label class="label">Yayınevi</label>
-          <input type="text" id="yayinevi" placeholder="Yayınevi" />
-        </div>
-        <div>
-          <label class="label">Yayın Yılı</label>
-          <input type="text" id="yayinYili" placeholder="Örn: 2018" />
+      <div id="scannerWrapReturn" class="scannerWrap">
+        <div id="readerReturn"></div>
+        <div class="scanHelp">
+          Barkodu kutuya ortalayın. Olmazsa telefonu biraz uzaklaştırıp tekrar yaklaştırın.
         </div>
       </div>
 
-      <label class="label">Not</label>
-      <textarea id="notText" placeholder="İsteğe bağlı not"></textarea>
+      <label class="label">ISBN</label>
+      <input type="text" id="returnIsbn" placeholder="ISBN yazın veya okutun" />
 
-      <button class="btn btnGreen" onclick="saveBook()">Kitabı Kaydet</button>
+      <button class="btn btnDark" onclick="findBookForReturn()">Kitabı Bul</button>
 
-      <div id="message" class="message"></div>
-      <div class="muted">Cloudflare Worker + D1 veritabanı aktif</div>
+      <div id="returnBookArea"></div>
+
+      <button class="btn btnGreen" onclick="confirmReturn()">İade Al</button>
+      <button class="btn btnGray backBtn" onclick="goHome()">Ana Ekran</button>
+
+      <div id="returnMessage" class="message"></div>
     </div>
   </div>
 
@@ -249,7 +354,9 @@
     const API_URL = 'https://little-heart-9411.sedasahingultekin.workers.dev';
 
     let qr = null;
-    let lastCode = '';
+    let activeMode = '';
+    let loanSelectedBook = null;
+    let returnSelectedBook = null;
 
     function safeHtml(text) {
       return String(text || '')
@@ -264,20 +371,36 @@
       return String(value || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
     }
 
-    function showMessage(text, type = 'success') {
-      const el = document.getElementById('message');
+    function openPanel(panelId) {
+      stopScanner();
+      document.getElementById('homeScreen').style.display = 'none';
+      document.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
+      document.getElementById(panelId).classList.add('active');
+      clearAllMessages();
+    }
+
+    function goHome() {
+      stopScanner();
+      document.getElementById('homeScreen').style.display = 'block';
+      document.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
+      clearAllMessages();
+    }
+
+    function clearAllMessages() {
+      ['loanMessage', 'returnMessage'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.className = 'message';
+          el.innerHTML = '';
+        }
+      });
+    }
+
+    function showMessage(id, text, type = 'success') {
+      const el = document.getElementById(id);
+      if (!el) return;
       el.className = 'message ' + type;
       el.innerHTML = safeHtml(text);
-    }
-
-    function clearMessage() {
-      const el = document.getElementById('message');
-      el.className = 'message';
-      el.innerHTML = '';
-    }
-
-    function isbnChanged() {
-      document.getElementById('preview').innerHTML = '';
     }
 
     async function apiPost(payload) {
@@ -292,20 +415,27 @@
       return await response.json();
     }
 
-    async function startScanner() {
-      clearMessage();
+    async function startScanner(mode) {
+      clearAllMessages();
+      await stopScanner();
+
+      activeMode = mode;
+
+      const wrapId = mode === 'loan' ? 'scannerWrap' : 'scannerWrapReturn';
+      const readerId = mode === 'loan' ? 'reader' : 'readerReturn';
+
+      const wrap = document.getElementById(wrapId);
+      const reader = document.getElementById(readerId);
 
       if (typeof Html5Qrcode === 'undefined') {
-        showMessage('html5-qrcode yüklenemedi', 'error');
+        showMessage(mode === 'loan' ? 'loanMessage' : 'returnMessage', 'html5-qrcode yüklenemedi', 'error');
         return;
       }
 
-      await stopScanner();
-
       try {
-        document.getElementById('scannerWrap').style.display = 'block';
-        qr = new Html5Qrcode('reader');
-        lastCode = '';
+        wrap.style.display = 'block';
+        reader.innerHTML = '';
+        qr = new Html5Qrcode(readerId);
 
         await qr.start(
           { facingMode: 'environment' },
@@ -315,18 +445,24 @@
           },
           async (decodedText) => {
             const isbn = cleanIsbn(decodedText);
-            if (!isbn || isbn === lastCode) return;
+            if (!isbn) return;
 
-            lastCode = isbn;
-            document.getElementById('isbn').value = isbn;
-            showMessage('ISBN okundu: ' + isbn, 'success');
-
-            await stopScanner();
-            await lookupIsbn();
+            if (mode === 'loan') {
+              document.getElementById('loanIsbn').value = isbn;
+              showMessage('loanMessage', 'ISBN okundu: ' + isbn, 'success');
+              await stopScanner();
+              await findBookForLoan();
+            } else {
+              document.getElementById('returnIsbn').value = isbn;
+              showMessage('returnMessage', 'ISBN okundu: ' + isbn, 'success');
+              await stopScanner();
+              await findBookForReturn();
+            }
           }
         );
       } catch (err) {
-        showMessage('Kamera açılamadı: ' + err.message, 'error');
+        await stopScanner();
+        showMessage(mode === 'loan' ? 'loanMessage' : 'returnMessage', 'Kamera açılamadı: ' + err.message, 'error');
       }
     }
 
@@ -338,102 +474,184 @@
           qr = null;
         }
 
-        const wrap = document.getElementById('scannerWrap');
-        const reader = document.getElementById('reader');
+        const wrap1 = document.getElementById('scannerWrap');
+        const wrap2 = document.getElementById('scannerWrapReturn');
+        const reader1 = document.getElementById('reader');
+        const reader2 = document.getElementById('readerReturn');
 
-        if (wrap) wrap.style.display = 'none';
-        if (reader) reader.innerHTML = '';
+        if (wrap1) wrap1.style.display = 'none';
+        if (wrap2) wrap2.style.display = 'none';
+        if (reader1) reader1.innerHTML = '';
+        if (reader2) reader2.innerHTML = '';
       } catch (err) {}
     }
 
-    async function lookupIsbn() {
-      clearMessage();
+    async function getAllBooks() {
+      const result = await apiPost({ action: 'booksList' });
 
-      const isbn = cleanIsbn(document.getElementById('isbn').value);
+      if (!result.ok) {
+        throw new Error(result.error || 'Kitap listesi alınamadı');
+      }
 
-      if (!isbn) {
-        showMessage('Önce ISBN girin veya okutun', 'warn');
+      return result.data || [];
+    }
+
+    function renderBookCard(book) {
+      const durum = String(book.durum || 'RAFTA').toUpperCase();
+      const statusClass = durum === 'RAFTA' ? 'rafta' : 'oduncte';
+
+      return `
+        <div class="bookCard">
+          <div class="bookTitle">${safeHtml(book.kitapAdi || '-')}</div>
+          <div class="line"><strong>Yazar:</strong> ${safeHtml(book.yazar || '-')}</div>
+          <div class="line"><strong>ISBN:</strong> ${safeHtml(book.isbn || '-')}</div>
+          <div class="line"><strong>Yayınevi:</strong> ${safeHtml(book.yayinevi || '-')}</div>
+          <div class="line"><strong>Yıl:</strong> ${safeHtml(book.yayinYili || '-')}</div>
+          <div class="line"><strong>Ödünç Alan:</strong> ${safeHtml(book.oduncAlan || '-')}</div>
+          <div class="line"><strong>Ödünç Tarihi:</strong> ${safeHtml(book.oduncTarihi || '-')}</div>
+          <div class="line"><strong>İade Tarihi:</strong> ${safeHtml(book.iadeTarihi || '-')}</div>
+          <div class="status ${statusClass}">${safeHtml(durum)}</div>
+        </div>
+      `;
+    }
+
+    async function findBookForLoan() {
+      showMessage('loanMessage', 'Kitap aranıyor...', 'success');
+      loanSelectedBook = null;
+      document.getElementById('loanBookArea').innerHTML = '';
+
+      try {
+        const isbn = cleanIsbn(document.getElementById('loanIsbn').value);
+        if (!isbn) {
+          showMessage('loanMessage', 'Önce ISBN girin veya okutun', 'warn');
+          return;
+        }
+
+        const books = await getAllBooks();
+        const book = books.find(b => cleanIsbn(b.isbn || '') === isbn);
+
+        if (!book) {
+          showMessage('loanMessage', 'Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
+          return;
+        }
+
+        if (String(book.durum || '').toUpperCase() === 'ÖDÜNÇTE') {
+          document.getElementById('loanBookArea').innerHTML = renderBookCard(book);
+          showMessage('loanMessage', 'Bu kitap zaten ödünçte', 'error');
+          loanSelectedBook = book;
+          return;
+        }
+
+        loanSelectedBook = book;
+        document.getElementById('loanBookArea').innerHTML = renderBookCard(book);
+        showMessage('loanMessage', 'Kitap bulundu', 'success');
+      } catch (err) {
+        showMessage('loanMessage', 'Arama hatası: ' + err.message, 'error');
+      }
+    }
+
+    async function confirmLoan() {
+      clearAllMessages();
+
+      if (!loanSelectedBook) {
+        showMessage('loanMessage', 'Önce kitabı bulun', 'warn');
+        return;
+      }
+
+      const borrower = (document.getElementById('borrowerName').value || '').trim();
+      if (!borrower) {
+        showMessage('loanMessage', 'Kişi adı zorunlu', 'warn');
+        return;
+      }
+
+      if (String(loanSelectedBook.durum || '').toUpperCase() === 'ÖDÜNÇTE') {
+        showMessage('loanMessage', 'Bu kitap zaten ödünçte', 'error');
         return;
       }
 
       try {
         const result = await apiPost({
-          action: 'isbnLookup',
-          isbn
+          action: 'loanBook',
+          id: loanSelectedBook.id,
+          borrower
         });
 
-        const data = result.data || {};
-
-        if (!data.bulundu) {
-          showMessage(data.mesaj || 'Kitap bilgisi bulunamadı', 'warn');
+        if (!result.ok) {
+          showMessage('loanMessage', result.error || 'Ödünç verme hatası', 'error');
           return;
         }
 
-        document.getElementById('kitapAdi').value = data.kitapAdi || '';
-        document.getElementById('yazar').value = data.yazar || '';
-        document.getElementById('yayinevi').value = data.yayinevi || '';
-        document.getElementById('yayinYili').value = data.yayinYili || '';
-
-        let html = `<div class="previewCard">`;
-
-        if (data.kapakUrl) {
-          html += `<img class="previewCover" src="${safeHtml(data.kapakUrl)}" />`;
-        }
-
-        html += `
-          <div class="bookTitle">${safeHtml(data.kitapAdi || '-')}</div>
-          <div class="line"><strong>Yazar:</strong> ${safeHtml(data.yazar || '-')}</div>
-          <div class="line"><strong>Yayınevi:</strong> ${safeHtml(data.yayinevi || '-')}</div>
-          <div class="line"><strong>Yıl:</strong> ${safeHtml(data.yayinYili || '-')}</div>
-        </div>`;
-
-        document.getElementById('preview').innerHTML = html;
-
-        showMessage('Kitap bilgisi getirildi', 'success');
-
+        showMessage('loanMessage', result.message || 'Kitap ödünç verildi', 'success');
+        document.getElementById('borrowerName').value = '';
+        await findBookForLoan();
       } catch (err) {
-        showMessage('Sorgu hatası: ' + err.message, 'error');
+        showMessage('loanMessage', 'Ödünç verme hatası: ' + err.message, 'error');
       }
     }
 
-    async function saveBook() {
-      clearMessage();
+    async function findBookForReturn() {
+      showMessage('returnMessage', 'Kitap aranıyor...', 'success');
+      returnSelectedBook = null;
+      document.getElementById('returnBookArea').innerHTML = '';
 
-      const payload = {
-        action: 'bookAdd',
-        isbn: cleanIsbn(document.getElementById('isbn').value),
-        kitapAdi: document.getElementById('kitapAdi').value.trim(),
-        yazar: document.getElementById('yazar').value.trim(),
-        yayinevi: document.getElementById('yayinevi').value.trim(),
-        yayinYili: document.getElementById('yayinYili').value.trim(),
-        notText: document.getElementById('notText').value.trim()
-      };
+      try {
+        const isbn = cleanIsbn(document.getElementById('returnIsbn').value);
+        if (!isbn) {
+          showMessage('returnMessage', 'Önce ISBN girin veya okutun', 'warn');
+          return;
+        }
 
-      if (!payload.kitapAdi || !payload.yazar) {
-        showMessage('Kitap adı ve yazar zorunlu', 'warn');
+        const books = await getAllBooks();
+        const book = books.find(b => cleanIsbn(b.isbn || '') === isbn);
+
+        if (!book) {
+          showMessage('returnMessage', 'Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
+          return;
+        }
+
+        if (String(book.durum || '').toUpperCase() !== 'ÖDÜNÇTE') {
+          document.getElementById('returnBookArea').innerHTML = renderBookCard(book);
+          showMessage('returnMessage', 'Bu kitap zaten rafta', 'warn');
+          returnSelectedBook = book;
+          return;
+        }
+
+        returnSelectedBook = book;
+        document.getElementById('returnBookArea').innerHTML = renderBookCard(book);
+        showMessage('returnMessage', 'Kitap bulundu', 'success');
+      } catch (err) {
+        showMessage('returnMessage', 'Arama hatası: ' + err.message, 'error');
+      }
+    }
+
+    async function confirmReturn() {
+      clearAllMessages();
+
+      if (!returnSelectedBook) {
+        showMessage('returnMessage', 'Önce kitabı bulun', 'warn');
+        return;
+      }
+
+      if (String(returnSelectedBook.durum || '').toUpperCase() !== 'ÖDÜNÇTE') {
+        showMessage('returnMessage', 'Bu kitap zaten rafta', 'warn');
         return;
       }
 
       try {
-        const result = await apiPost(payload);
+        const result = await apiPost({
+          action: 'returnBook',
+          id: returnSelectedBook.id
+        });
 
         if (!result.ok) {
-          showMessage(result.error || 'Kayıt hatası', 'error');
+          showMessage('returnMessage', result.error || 'İade alma hatası', 'error');
           return;
         }
 
-        showMessage(result.message || 'Kitap kaydedildi', 'success');
-
-        document.getElementById('isbn').value = '';
-        document.getElementById('kitapAdi').value = '';
-        document.getElementById('yazar').value = '';
-        document.getElementById('yayinevi').value = '';
-        document.getElementById('yayinYili').value = '';
-        document.getElementById('notText').value = '';
-        document.getElementById('preview').innerHTML = '';
-
+        showMessage('returnMessage', result.message || 'Kitap iade alındı', 'success');
+        await findBookForReturn();
       } catch (err) {
-        showMessage('Kayıt hatası: ' + err.message, 'error');
+        showMessage('returnMessage', 'İade alma hatası: ' + err.message, 'error');
       }
     }
   </script>
