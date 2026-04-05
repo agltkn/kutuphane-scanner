@@ -217,6 +217,33 @@ function ekleForm() {
         overflow:hidden;
       }
 
+      .kitapKartUst{
+        display:flex;
+        gap:14px;
+        align-items:flex-start;
+      }
+
+      .kapakWrap{
+        width:96px;
+        min-width:96px;
+        max-width:96px;
+      }
+
+      .kapakImg{
+        width:96px;
+        height:140px;
+        object-fit:cover;
+        border-radius:10px;
+        border:1px solid #e5e7eb;
+        background:#fff;
+        display:block;
+      }
+
+      .kitapBilgi{
+        flex:1;
+        min-width:0;
+      }
+
       .kitapBaslik{
         font-size:24px;
         font-weight:bold;
@@ -265,6 +292,21 @@ function ekleForm() {
       @media (max-width:640px){
         .topActions{
           grid-template-columns:1fr;
+        }
+
+        .kitapKartUst{
+          flex-direction:column;
+        }
+
+        .kapakWrap{
+          width:100%;
+          min-width:0;
+          max-width:none;
+        }
+
+        .kapakImg{
+          width:110px;
+          height:160px;
         }
       }
     </style>
@@ -355,13 +397,32 @@ async function isbnBilgisiGetir() {
     document.getElementById('yayinYili').value = data.yayinYili || '';
 
     if (kartAlani) {
+      const kapakHtml = data.kapakUrl
+        ? `
+          <div class="kapakWrap">
+            <img
+              class="kapakImg"
+              src="${String(data.kapakUrl).replace(/"/g, '&quot;')}"
+              alt="Kitap kapağı"
+              referrerpolicy="no-referrer"
+              loading="lazy"
+            >
+          </div>
+        `
+        : '';
+
       kartAlani.innerHTML = `
         <div class="kitapKart">
-          <div class="kitapBaslik">${guvenliYazi(data.kitapAdi || '-')}</div>
-          <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(data.yazar || '-')}</div>
-          <div class="kitapSatir"><strong>Yayınevi:</strong> ${guvenliYazi(data.yayinevi || '-')}</div>
-          <div class="kitapSatir"><strong>Yıl:</strong> ${guvenliYazi(data.yayinYili || '-')}</div>
-          <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(data.isbn || '-')}</div>
+          <div class="kitapKartUst">
+            ${kapakHtml}
+            <div class="kitapBilgi">
+              <div class="kitapBaslik">${guvenliYazi(data.kitapAdi || '-')}</div>
+              <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(data.yazar || '-')}</div>
+              <div class="kitapSatir"><strong>Yayınevi:</strong> ${guvenliYazi(data.yayinevi || '-')}</div>
+              <div class="kitapSatir"><strong>Yıl:</strong> ${guvenliYazi(data.yayinYili || '-')}</div>
+              <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(data.isbn || '-')}</div>
+            </div>
+          </div>
         </div>
       `;
     }
