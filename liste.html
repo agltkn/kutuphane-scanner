@@ -1,1 +1,173 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Kütüphane Kitap Listesi</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      padding: 14px;
+    }
+    .app {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .header {
+      background: #111;
+      color: #fff;
+      padding: 18px;
+      border-radius: 18px;
+      font-size: 28px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .toolbar {
+      background: #fff;
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 14px;
+    }
+    input {
+      width: 100%;
+      padding: 16px;
+      font-size: 18px;
+      border-radius: 12px;
+      border: 1px solid #ccc;
+    }
+    .list {
+      display: grid;
+      gap: 12px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .title {
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    .line {
+      font-size: 16px;
+      margin: 4px 0;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .status {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .rafta {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .oduncte {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .empty {
+      text-align: center;
+      color: #666;
+      padding: 30px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">📚 Kitap Listesi</div>
 
+    <div class="toolbar">
+      <input
+        type="text"
+        id="search"
+        placeholder="Kitap adı, yazar veya ISBN ara..."
+        oninput="renderList()"
+      />
+    </div>
+
+    <div id="list" class="list"></div>
+  </div>
+
+  <script>
+    const API_URL = 'https://little-heart-9411.sedasahingultekin.workers.dev';
+    let books = [];
+
+    function safeHtml(text) {
+      return String(text || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    async function loadBooks() {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'booksList'
+        })
+      });
+
+      const result = await response.json();
+      books = result.data || [];
+      renderList();
+    }
+
+    function renderList() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const list = document.getElementById('list');
+
+      let filtered = books;
+
+      if (q) {
+        filtered = books.filter(book =>
+          (book.kitapAdi || '').toLowerCase().includes(q) ||
+          (book.yazar || '').toLowerCase().includes(q) ||
+          (book.isbn || '').toLowerCase().includes(q)
+        );
+      }
+
+      if (!filtered.length) {
+        list.innerHTML = '<div class="empty">Kayıtlı kitap bulunamadı</div>';
+        return;
+      }
+
+      list.innerHTML = filtered.map(book => {
+        const durum = (book.durum || 'RAFTA').toUpperCase();
+        const statusClass = durum === 'RAFTA' ? 'rafta' : 'oduncte';
+
+        return `
+          <div class="card">
+            <div class="title">${safeHtml(book.kitapAdi || '-')}</div>
+            <div class="line"><strong>Yazar:</strong> ${safeHtml(book.yazar || '-')}</div>
+            <div class="line"><strong>ISBN:</strong> ${safeHtml(book.isbn || '-')}</div>
+            <div class="line"><strong>Yayınevi:</strong> ${safeHtml(book.yayinevi || '-')}</div>
+            <div class="line"><strong>Yıl:</strong> ${safeHtml(book.yayinYili || '-')}</div>
+            <div class="status ${statusClass}">${safeHtml(durum)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    loadBooks();
+  </script>
+</body>
+</html>
