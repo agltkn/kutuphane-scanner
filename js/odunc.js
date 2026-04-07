@@ -54,57 +54,34 @@ async function oduncTumKitaplariGetir() {
 
 async function kameraKapatOdunc() {
   try {
-    if (window.qrReader) {
-      try { await window.qrReader.stop(); } catch (e) {}
-      try { await window.qrReader.clear(); } catch (e) {}
-      window.qrReader = null;
+    if (window.KutuphaneCamera) {
+      await window.KutuphaneCamera.stop();
     }
-
     const wrap = document.getElementById('scannerWrap');
     const reader = document.getElementById('reader');
-
     if (wrap) wrap.style.display = 'none';
     if (reader) reader.innerHTML = '';
-    window.sonOkunanKod = '';
   } catch (err) {}
 }
 
 async function kamerayiBaslatOdunc() {
   oduncTemizMesaj();
-  await kameraKapatOdunc();
 
-  if (typeof Html5Qrcode === 'undefined') {
+  if (!window.KutuphaneCamera) {
     oduncMesajGoster('Kamera modülü yüklenemedi', 'error');
     return;
   }
 
-  const wrap = document.getElementById('scannerWrap');
-  const reader = document.getElementById('reader');
-
-  if (!wrap || !reader) {
-    oduncMesajGoster('Kamera alanı bulunamadı', 'error');
-    return;
-  }
-
   try {
-    wrap.style.display = 'block';
-    reader.innerHTML = '';
-    window.qrReader = new Html5Qrcode('reader');
-    window.sonOkunanKod = '';
-
-    await window.qrReader.start(
-      { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 120 }
+    await window.KutuphaneCamera.start({
+      readerId: 'reader',
+      wrapId: 'scannerWrap',
+      config: {
+        fps: 5,
+        qrbox: { width: 280, height: 90 },
+        aspectRatio: 1.7778
       },
-      async (decodedText) => {
-        const isbn = temizIsbn(decodedText);
-        if (!isbn) return;
-        if (isbn === window.sonOkunanKod) return;
-
-        window.sonOkunanKod = isbn;
-
+      onDetected: async (isbn) => {
         const isbnInput = document.getElementById('oduncIsbn');
         if (isbnInput) isbnInput.value = isbn;
 
@@ -112,7 +89,7 @@ async function kamerayiBaslatOdunc() {
         await kameraKapatOdunc();
         await oduncKitapBul();
       }
-    );
+    });
   } catch (err) {
     await kameraKapatOdunc();
     oduncMesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
@@ -199,6 +176,7 @@ function oduncVerForm() {
         border-radius:12px;
         overflow:hidden;
         background:#000;
+        touch-action:manipulation;
       }
 
       .scanHelp{
