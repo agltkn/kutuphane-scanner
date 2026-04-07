@@ -17,6 +17,9 @@ function guvenliYazi(deger) {
 }
 
 function temizIsbn(deger) {
+  if (window.KutuphaneCamera && window.KutuphaneCamera.temizKod) {
+    return window.KutuphaneCamera.temizKod(deger);
+  }
   return String(deger || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
 }
 
@@ -48,142 +51,44 @@ async function apiPost(payload) {
 
 async function kameraKapat() {
   try {
-    if (window.qrReader) {
-      try { await window.qrReader.stop(); } catch (e) {}
-      try { await window.qrReader.clear(); } catch (e) {}
-      window.qrReader = null;
+    if (window.KutuphaneCamera) {
+      await window.KutuphaneCamera.stop();
     }
-
     const wrap = document.getElementById('scannerWrap');
     const reader = document.getElementById('reader');
-
     if (wrap) wrap.style.display = 'none';
     if (reader) reader.innerHTML = '';
-    window.sonOkunanKod = '';
   } catch (err) {}
 }
 
-async function enUygunArkaKameraIdBul() {
-  try {
-    const devices = await Html5Qrcode.getCameras();
-    if (!devices || !devices.length) return null;
-
-    const arkaKameralar = devices.filter(d => {
-      const name = String(d.label || '').toLowerCase();
-      return (
-        name.includes('back') ||
-        name.includes('rear') ||
-        name.includes('environment') ||
-        name.includes('arka')
-      );
-    });
-
-    if (!arkaKameralar.length) return null;
-
-    const puanli = arkaKameralar.map(cam => {
-      const name = String(cam.label || '').toLowerCase();
-      let puan = 0;
-
-      if (name.includes('main')) puan += 10;
-      if (name.includes('1x')) puan += 8;
-      if (name.includes('back')) puan += 5;
-      if (name.includes('rear')) puan += 5;
-      if (name.includes('wide')) puan -= 10;
-      if (name.includes('ultra')) puan -= 12;
-      if (name.includes('0.5')) puan -= 12;
-
-      return { id: cam.id, puan };
-    });
-
-    puanli.sort((a, b) => b.puan - a.puan);
-    return puanli[0]?.id || null;
-  } catch (err) {
-    return null;
-  }
-}
-
-async function kameraYenidenOdakla() {
-  if (!window.kameraAcik) return;
-
-  const mevcutIsbn = document.getElementById('isbn')?.value || '';
-
-  try {
-    await kamerayiBaslatEkle(true);
-
-    if (mevcutIsbn) {
-      const input = document.getElementById('isbn');
-      if (input) input.value = mevcutIsbn;
-    }
-
-    mesajGoster('Odak yenilendi', 'success');
-  } catch (err) {}
-}
-
-async function kamerayiBaslatEkle(odakReset = false) {
+async function kamerayiBaslatEkle() {
   temizMesaj();
 
-  if (!odakReset) {
-    await kameraKapat();
-  }
-
-  if (typeof Html5Qrcode === 'undefined') {
+  if (!window.KutuphaneCamera) {
     mesajGoster('Kamera modülü yüklenemedi', 'error');
     return;
   }
 
-  const wrap = document.getElementById('scannerWrap');
-  const reader = document.getElementById('reader');
-
-  if (!wrap || !reader) {
-    mesajGoster('Kamera alanı bulunamadı', 'error');
-    return;
-  }
-
   try {
-    wrap.style.display = 'block';
-
-    if (!window.qrReader || odakReset) {
-      if (window.qrReader) {
-        try { await window.qrReader.stop(); } catch (e) {}
-        try { await window.qrReader.clear(); } catch (e) {}
-      }
-
-      reader.innerHTML = '';
-      window.qrReader = new Html5Qrcode('reader');
-    }
-
-    window.kameraAcik = true;
-    window.sonOkunanKod = '';
-
-    const kameraId = await enUygunArkaKameraIdBul();
-    const kameraAyari = kameraId || { facingMode: 'environment' };
-
-    await window.qrReader.start(
-      kameraAyari,
-      {
+    await window.KutuphaneCamera.start({
+      readerId: 'reader',
+      wrapId: 'scannerWrap',
+      config: {
         fps: 5,
         qrbox: { width: 280, height: 90 },
         aspectRatio: 1.7778
       },
-      async (decodedText) => {
-        const isbn = temizIsbn(decodedText);
-        if (!isbn) return;
-        if (isbn === window.sonOkunanKod) return;
-
-        window.sonOkunanKod = isbn;
-
+      onDetected: async (isbn) => {
         const isbnInput = document.getElementById('isbn');
         if (isbnInput) isbnInput.value = isbn;
 
         mesajGoster('ISBN okundu: ' + isbn, 'success');
         await kameraKapat();
-        window.kameraAcik = false;
         await isbnBilgisiGetir();
       }
-    );
+    });
   } catch (err) {
     await kameraKapat();
-    window.kameraAcik = false;
     mesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
   }
 }
@@ -272,7 +177,6 @@ function ekleForm() {
         overflow:hidden;
         background:#000;
         touch-action:manipulation;
-        cursor:crosshair;
       }
 
       .scanHelp{
@@ -326,6 +230,7 @@ function ekleForm() {
         font-weight:bold;
         color:#222;
         margin-bottom:10px;
+        word-break:break-word;
       }
 
       .kitapSatir{
@@ -333,6 +238,7 @@ function ekleForm() {
         color:#444;
         margin:6px 0;
         line-height:1.4;
+        word-break:break-word;
       }
 
       .mesajKutusu{
@@ -342,6 +248,8 @@ function ekleForm() {
         border-radius:14px;
         font-size:18px;
         font-weight:bold;
+        line-height:1.5;
+        word-break:break-word;
       }
 
       .mesaj-success{
@@ -361,6 +269,27 @@ function ekleForm() {
         background:#ffedd5;
         color:#9a3412;
       }
+
+      @media (max-width:640px){
+        .topActions{
+          grid-template-columns:1fr;
+        }
+
+        .kitapKartUst{
+          flex-direction:column;
+        }
+
+        .kapakWrap{
+          width:100%;
+          min-width:0;
+          max-width:none;
+        }
+
+        .kapakImg{
+          width:110px;
+          height:160px;
+        }
+      }
     </style>
 
     <div class="formCard">
@@ -373,7 +302,7 @@ function ekleForm() {
 
       <div id="scannerWrap" class="scannerWrap">
         <div id="reader"></div>
-        <div class="scanHelp">Barkoda dokunursan kamera yeniden odaklanır</div>
+        <div class="scanHelp">Barkodu kutuya ortalayın</div>
       </div>
 
       <label class="formLabel">ISBN</label>
@@ -405,10 +334,135 @@ function ekleForm() {
   `;
 
   setTimeout(() => {
-    const reader = document.getElementById('reader');
-    if (reader) {
-      reader.addEventListener('click', kameraYenidenOdakla);
-      reader.addEventListener('touchstart', kameraYenidenOdakla, { passive: true });
+    alan.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
+async function isbnBilgisiGetir() {
+  temizMesaj();
+
+  const isbnInput = document.getElementById('isbn');
+  if (!isbnInput) return;
+
+  const isbn = temizIsbn(isbnInput.value);
+
+  if (!isbn) {
+    mesajGoster('Önce ISBN girin veya okutun', 'warn');
+    return;
+  }
+
+  try {
+    const sonuc = await apiPost({
+      action: 'isbnLookup',
+      isbn: isbn
+    });
+
+    if (!sonuc.ok) {
+      mesajGoster(sonuc.error || 'Sorgu hatası', 'error');
+      return;
     }
-  }, 300);
+
+    const data = sonuc.data || {};
+    const kartAlani = document.getElementById('ekleKitapAlani');
+    if (kartAlani) kartAlani.innerHTML = '';
+
+    if (!data.bulundu) {
+      mesajGoster(data.mesaj || 'Kitap bilgisi bulunamadı', 'warn');
+      return;
+    }
+
+    document.getElementById('isbn').value = data.isbn || '';
+    document.getElementById('kitapAdi').value = data.kitapAdi || '';
+    document.getElementById('yazar').value = data.yazar || '';
+    document.getElementById('yayinevi').value = data.yayinevi || '';
+    document.getElementById('yayinYili').value = data.yayinYili || '';
+
+    if (kartAlani) {
+      const kapakHtml = data.kapakUrl
+        ? `
+          <div class="kapakWrap">
+            <img
+              class="kapakImg"
+              src="${String(data.kapakUrl).replace(/"/g, '&quot;')}"
+              alt="Kitap kapağı"
+              referrerpolicy="no-referrer"
+              loading="lazy"
+            >
+          </div>
+        `
+        : '';
+
+      kartAlani.innerHTML = `
+        <div class="kitapKart">
+          <div class="kitapKartUst">
+            ${kapakHtml}
+            <div class="kitapBilgi">
+              <div class="kitapBaslik">${guvenliYazi(data.kitapAdi || '-')}</div>
+              <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(data.yazar || '-')}</div>
+              <div class="kitapSatir"><strong>Yayınevi:</strong> ${guvenliYazi(data.yayinevi || '-')}</div>
+              <div class="kitapSatir"><strong>Yıl:</strong> ${guvenliYazi(data.yayinYili || '-')}</div>
+              <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(data.isbn || '-')}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (data.zatenKayitli && data.mevcutKayit) {
+      mesajGoster('Bu ISBN sistemde zaten kayıtlı', 'error');
+    } else {
+      mesajGoster('Kitap bilgisi dolduruldu', 'success');
+    }
+  } catch (err) {
+    mesajGoster('Sorgu hatası: ' + err.message, 'error');
+  }
+}
+
+async function kitapEkle() {
+  temizMesaj();
+
+  const payload = {
+    action: 'bookAdd',
+    userKey: getUserKey(),
+    isbn: temizIsbn(document.getElementById('isbn')?.value || ''),
+    kitapAdi: (document.getElementById('kitapAdi')?.value || '').trim(),
+    yazar: (document.getElementById('yazar')?.value || '').trim(),
+    yayinevi: (document.getElementById('yayinevi')?.value || '').trim(),
+    yayinYili: (document.getElementById('yayinYili')?.value || '').trim(),
+    notText: (document.getElementById('notText')?.value || '').trim()
+  };
+
+  if (!payload.kitapAdi || !payload.yazar) {
+    mesajGoster('Kitap adı ve yazar zorunlu', 'warn');
+    return;
+  }
+
+  try {
+    const sonuc = await apiPost(payload);
+
+    if (!sonuc.ok) {
+      mesajGoster(sonuc.error || 'Kayıt hatası', 'error');
+      return;
+    }
+
+    const mesaj = String(sonuc.message || '');
+    if (mesaj.toLowerCase().includes('zaten')) {
+      mesajGoster(mesaj, 'error');
+      return;
+    }
+
+    mesajGoster(mesaj || 'Kitap kaydedildi', 'success');
+
+    document.getElementById('isbn').value = '';
+    document.getElementById('kitapAdi').value = '';
+    document.getElementById('yazar').value = '';
+    document.getElementById('yayinevi').value = '';
+    document.getElementById('yayinYili').value = '';
+    document.getElementById('notText').value = '';
+
+    const kartAlani = document.getElementById('ekleKitapAlani');
+    if (kartAlani) kartAlani.innerHTML = '';
+  } catch (err) {
+    mesajGoster('Kayıt hatası: ' + err.message, 'error');
+  }
 }
