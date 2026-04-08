@@ -12,6 +12,13 @@ function silMesajGoster(mesaj, tip = 'success') {
   kutu.innerHTML = guvenliYazi(mesaj);
 }
 
+function silTemizIsbn(deger) {
+  if (window.KutuphaneCamera && window.KutuphaneCamera.temizKod) {
+    return window.KutuphaneCamera.temizKod(deger);
+  }
+  return String(deger || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
+}
+
 function silKitapKartHtml(kitap) {
   const durum = String(kitap.durum || 'RAFTA').toUpperCase();
   let badgeClass = 'rafta';
@@ -53,57 +60,34 @@ async function silTumKitaplariGetir() {
 
 async function kameraKapatSil() {
   try {
-    if (window.qrReader) {
-      try { await window.qrReader.stop(); } catch (e) {}
-      try { await window.qrReader.clear(); } catch (e) {}
-      window.qrReader = null;
+    if (window.KutuphaneCamera) {
+      await window.KutuphaneCamera.stop();
     }
-
     const wrap = document.getElementById('scannerWrap');
     const reader = document.getElementById('reader');
-
     if (wrap) wrap.style.display = 'none';
     if (reader) reader.innerHTML = '';
-    window.sonOkunanKod = '';
   } catch (err) {}
 }
 
 async function kamerayiBaslatSil() {
   silTemizMesaj();
-  await kameraKapatSil();
 
-  if (typeof Html5Qrcode === 'undefined') {
+  if (!window.KutuphaneCamera) {
     silMesajGoster('Kamera modülü yüklenemedi', 'error');
     return;
   }
 
-  const wrap = document.getElementById('scannerWrap');
-  const reader = document.getElementById('reader');
-
-  if (!wrap || !reader) {
-    silMesajGoster('Kamera alanı bulunamadı', 'error');
-    return;
-  }
-
   try {
-    wrap.style.display = 'block';
-    reader.innerHTML = '';
-    window.qrReader = new Html5Qrcode('reader');
-    window.sonOkunanKod = '';
-
-    await window.qrReader.start(
-      { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 120 }
+    await window.KutuphaneCamera.start({
+      readerId: 'reader',
+      wrapId: 'scannerWrap',
+      config: {
+        fps: 5,
+        qrbox: { width: 280, height: 90 },
+        aspectRatio: 1.7778
       },
-      async (decodedText) => {
-        const isbn = temizIsbn(decodedText);
-        if (!isbn) return;
-        if (isbn === window.sonOkunanKod) return;
-
-        window.sonOkunanKod = isbn;
-
+      onDetected: async (isbn) => {
         const isbnInput = document.getElementById('silIsbn');
         if (isbnInput) isbnInput.value = isbn;
 
@@ -111,7 +95,7 @@ async function kamerayiBaslatSil() {
         await kameraKapatSil();
         await silKitapBul();
       }
-    );
+    });
   } catch (err) {
     await kameraKapatSil();
     silMesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
@@ -199,6 +183,7 @@ function silForm() {
         border-radius:12px;
         overflow:hidden;
         background:#000;
+        touch-action:manipulation;
       }
 
       .scanHelp{
@@ -331,14 +316,14 @@ async function silKitapBul(suppressStatusMessage = false) {
   if (alan) alan.innerHTML = '';
 
   try {
-    const isbn = temizIsbn(document.getElementById('silIsbn')?.value || '');
+    const isbn = silTemizIsbn(document.getElementById('silIsbn')?.value || '');
     if (!isbn) {
       silMesajGoster('Önce ISBN girin veya okutun', 'warn');
       return;
     }
 
     const kitaplar = await silTumKitaplariGetir();
-    const kitap = kitaplar.find(k => temizIsbn(k.isbn || '') === isbn);
+    const kitap = kitaplar.find(k => silTemizIsbn(k.isbn || '') === isbn);
 
     if (!kitap) {
       silMesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
