@@ -74,8 +74,8 @@ async function kamerayiBaslatEkle() {
       readerId: 'reader',
       wrapId: 'scannerWrap',
       config: {
-        fps: 5,
-        qrbox: { width: 280, height: 90 },
+        fps: 8,
+        qrbox: { width: 320, height: 140 },
         aspectRatio: 1.7778
       },
       onDetected: async (isbn) => {
@@ -186,7 +186,7 @@ function ekleForm() {
         padding:10px 12px;
         border-radius:12px;
         font-size:14px;
-        line-height:1.4;
+        line-height:1.5;
       }
 
       .kitapKart{
@@ -302,7 +302,10 @@ function ekleForm() {
 
       <div id="scannerWrap" class="scannerWrap">
         <div id="reader"></div>
-        <div class="scanHelp">Barkodu kutuya ortalayın</div>
+        <div class="scanHelp">
+          Barkodu kutuya ortalayın.<br>
+          Okunmazsa barkod altındaki 13 haneli ISBN’yi elle girin.
+        </div>
       </div>
 
       <label class="formLabel">ISBN</label>
