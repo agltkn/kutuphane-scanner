@@ -52,59 +52,43 @@ async function iadeTumKitaplariGetir() {
   return sonuc.data || [];
 }
 
+function iadeTemizIsbn(deger) {
+  if (window.KutuphaneCamera && window.KutuphaneCamera.temizKod) {
+    return window.KutuphaneCamera.temizKod(deger);
+  }
+  return String(deger || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
+}
+
 async function kameraKapatIade() {
   try {
-    if (window.qrReader) {
-      try { await window.qrReader.stop(); } catch (e) {}
-      try { await window.qrReader.clear(); } catch (e) {}
-      window.qrReader = null;
+    if (window.KutuphaneCamera) {
+      await window.KutuphaneCamera.stop();
     }
-
     const wrap = document.getElementById('scannerWrap');
     const reader = document.getElementById('reader');
-
     if (wrap) wrap.style.display = 'none';
     if (reader) reader.innerHTML = '';
-    window.sonOkunanKod = '';
   } catch (err) {}
 }
 
 async function kamerayiBaslatIade() {
   iadeTemizMesaj();
-  await kameraKapatIade();
 
-  if (typeof Html5Qrcode === 'undefined') {
+  if (!window.KutuphaneCamera) {
     iadeMesajGoster('Kamera modülü yüklenemedi', 'error');
     return;
   }
 
-  const wrap = document.getElementById('scannerWrap');
-  const reader = document.getElementById('reader');
-
-  if (!wrap || !reader) {
-    iadeMesajGoster('Kamera alanı bulunamadı', 'error');
-    return;
-  }
-
   try {
-    wrap.style.display = 'block';
-    reader.innerHTML = '';
-    window.qrReader = new Html5Qrcode('reader');
-    window.sonOkunanKod = '';
-
-    await window.qrReader.start(
-      { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 120 }
+    await window.KutuphaneCamera.start({
+      readerId: 'reader',
+      wrapId: 'scannerWrap',
+      config: {
+        fps: 5,
+        qrbox: { width: 280, height: 90 },
+        aspectRatio: 1.7778
       },
-      async (decodedText) => {
-        const isbn = temizIsbn(decodedText);
-        if (!isbn) return;
-        if (isbn === window.sonOkunanKod) return;
-
-        window.sonOkunanKod = isbn;
-
+      onDetected: async (isbn) => {
         const isbnInput = document.getElementById('iadeIsbn');
         if (isbnInput) isbnInput.value = isbn;
 
@@ -112,7 +96,7 @@ async function kamerayiBaslatIade() {
         await kameraKapatIade();
         await iadeKitapBul();
       }
-    );
+    });
   } catch (err) {
     await kameraKapatIade();
     iadeMesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
@@ -199,6 +183,7 @@ function iadeForm() {
         border-radius:12px;
         overflow:hidden;
         background:#000;
+        touch-action:manipulation;
       }
 
       .scanHelp{
@@ -330,14 +315,14 @@ async function iadeKitapBul(suppressStatusMessage = false) {
   if (alan) alan.innerHTML = '';
 
   try {
-    const isbn = temizIsbn(document.getElementById('iadeIsbn')?.value || '');
+    const isbn = iadeTemizIsbn(document.getElementById('iadeIsbn')?.value || '');
     if (!isbn) {
       iadeMesajGoster('Önce ISBN girin veya okutun', 'warn');
       return;
     }
 
     const kitaplar = await iadeTumKitaplariGetir();
-    const kitap = kitaplar.find(k => temizIsbn(k.isbn || '') === isbn);
+    const kitap = kitaplar.find(k => iadeTemizIsbn(k.isbn || '') === isbn);
 
     if (!kitap) {
       iadeMesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
