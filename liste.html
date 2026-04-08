@@ -79,6 +79,45 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
 
+    .cardTop {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .coverWrap {
+      width: 72px;
+      min-width: 72px;
+      max-width: 72px;
+    }
+
+    .coverImg {
+      width: 72px;
+      height: 104px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
+      display: block;
+    }
+
+    .coverPlaceholder {
+      width: 72px;
+      height: 104px;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+    }
+
+    .cardBody {
+      flex: 1;
+      min-width: 0;
+    }
+
     .title {
       font-size: 22px;
       font-weight: bold;
@@ -122,6 +161,11 @@
     .oduncte {
       background: #fee2e2;
       color: #991b1b;
+    }
+
+    .kayip {
+      background: #ffedd5;
+      color: #9a3412;
     }
 
     .actions {
@@ -198,6 +242,18 @@
       .actions {
         grid-template-columns: 1fr;
       }
+
+      .coverWrap {
+        width: 64px;
+        min-width: 64px;
+        max-width: 64px;
+      }
+
+      .coverImg,
+      .coverPlaceholder {
+        width: 64px;
+        height: 92px;
+      }
     }
   </style>
 </head>
@@ -205,7 +261,7 @@
   <div class="app">
     <div class="header">📚 Kitap Listesi</div>
 
-    <a class="homeBtn" href="./?v=30">
+    <a class="homeBtn" href="./?v=46">
       <button>🏠 Ana Ekrana Dön</button>
     </a>
 
@@ -236,6 +292,14 @@
         .replaceAll("'", '&#039;');
     }
 
+    function safeAttr(text) {
+      return String(text || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
     function showMessage(text, type = 'success') {
       const el = document.getElementById('message');
       el.className = 'message ' + type;
@@ -247,6 +311,34 @@
       const el = document.getElementById('message');
       el.className = 'message';
       el.innerHTML = '';
+    }
+
+    function temizIsbn(value) {
+      return String(value || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
+    }
+
+    function kapakUrlOlustur(isbn) {
+      const temiz = temizIsbn(isbn);
+      if (!temiz) return '';
+      return 'https://covers.openlibrary.org/b/isbn/' + encodeURIComponent(temiz) + '-M.jpg';
+    }
+
+    function kapakHtml(book) {
+      const url = kapakUrlOlustur(book.isbn || '');
+      if (!url) {
+        return `<div class="coverPlaceholder">📘</div>`;
+      }
+
+      return `
+        <img
+          class="coverImg"
+          src="${safeAttr(url)}"
+          alt="Kapak"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.outerHTML='<div class=&quot;coverPlaceholder&quot;>📘</div>'"
+        >
+      `;
     }
 
     async function apiPost(payload) {
@@ -303,31 +395,43 @@
 
       list.innerHTML = filtered.map(book => {
         const durum = String(book.durum || 'RAFTA').toUpperCase();
-        const statusClass = durum === 'RAFTA' ? 'rafta' : 'oduncte';
+        let statusClass = 'rafta';
+        if (durum === 'ÖDÜNÇTE') statusClass = 'oduncte';
+        if (durum === 'KAYIP') statusClass = 'kayip';
+
         const borrower = book.oduncAlan || '-';
         const loanDate = book.oduncTarihi || '-';
         const returnDate = book.iadeTarihi || '-';
 
         const loanButton = durum === 'RAFTA'
           ? `<button class="btn btnLoan" onclick="loanBook(${Number(book.id)})">Ödünç Ver</button>`
-          : `<button class="btn btnLoan btnDisabled" disabled>Ödünçte</button>`;
+          : `<button class="btn btnLoan btnDisabled" disabled>Ödünç Verilemez</button>`;
 
         const returnButton = durum === 'ÖDÜNÇTE'
           ? `<button class="btn btnReturn" onclick="returnBook(${Number(book.id)})">İade Al</button>`
-          : `<button class="btn btnReturn btnDisabled" disabled>Rafta</button>`;
+          : `<button class="btn btnReturn btnDisabled" disabled>İade Beklemiyor</button>`;
 
         return `
           <div class="card">
-            <div class="codeBadge">${safeHtml(book.kitapKodu || '-')}</div>
-            <div class="title">${safeHtml(book.kitapAdi || '-')}</div>
-            <div class="line"><strong>Yazar:</strong> ${safeHtml(book.yazar || '-')}</div>
-            <div class="line"><strong>ISBN:</strong> ${safeHtml(book.isbn || '-')}</div>
-            <div class="line"><strong>Yayınevi:</strong> ${safeHtml(book.yayinevi || '-')}</div>
-            <div class="line"><strong>Yıl:</strong> ${safeHtml(book.yayinYili || '-')}</div>
-            <div class="line"><strong>Ödünç Alan:</strong> ${safeHtml(borrower)}</div>
-            <div class="line"><strong>Ödünç Tarihi:</strong> ${safeHtml(loanDate)}</div>
-            <div class="line"><strong>İade Tarihi:</strong> ${safeHtml(returnDate)}</div>
-            <div class="status ${statusClass}">${safeHtml(durum)}</div>
+            <div class="cardTop">
+              <div class="coverWrap">
+                ${kapakHtml(book)}
+              </div>
+
+              <div class="cardBody">
+                <div class="codeBadge">${safeHtml(book.kitapKodu || '-')}</div>
+                <div class="title">${safeHtml(book.kitapAdi || '-')}</div>
+                <div class="line"><strong>Yazar:</strong> ${safeHtml(book.yazar || '-')}</div>
+                <div class="line"><strong>ISBN:</strong> ${safeHtml(book.isbn || '-')}</div>
+                <div class="line"><strong>Yayınevi:</strong> ${safeHtml(book.yayinevi || '-')}</div>
+                <div class="line"><strong>Yıl:</strong> ${safeHtml(book.yayinYili || '-')}</div>
+                <div class="line"><strong>Ödünç Alan:</strong> ${safeHtml(borrower)}</div>
+                <div class="line"><strong>Ödünç Tarihi:</strong> ${safeHtml(loanDate)}</div>
+                <div class="line"><strong>İade Tarihi:</strong> ${safeHtml(returnDate)}</div>
+                <div class="status ${statusClass}">${safeHtml(durum)}</div>
+              </div>
+            </div>
+
             <div class="actions">
               ${loanButton}
               ${returnButton}
