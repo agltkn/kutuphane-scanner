@@ -33,15 +33,15 @@ window.KutuphaneCamera = (function () {
         const label = String(cam.label || '').toLowerCase();
         let puan = 0;
 
-        if (label.includes('main')) puan += 12;
-        if (label.includes('1x')) puan += 10;
+        if (label.includes('main')) puan += 14;
+        if (label.includes('1x')) puan += 12;
         if (label.includes('back')) puan += 6;
         if (label.includes('rear')) puan += 6;
         if (label.includes('environment')) puan += 6;
 
         if (label.includes('wide')) puan -= 12;
-        if (label.includes('ultra')) puan -= 14;
-        if (label.includes('0.5')) puan -= 14;
+        if (label.includes('ultra')) puan -= 16;
+        if (label.includes('0.5')) puan -= 16;
         if (label.includes('telephoto')) puan -= 4;
         if (label.includes('front')) puan -= 20;
 
@@ -60,11 +60,33 @@ window.KutuphaneCamera = (function () {
   }
 
   function varsayilanConfig() {
-    return {
-      fps: 5,
-      qrbox: { width: 280, height: 90 },
-      aspectRatio: 1.7778
+    const base = {
+      fps: 8,
+      qrbox: { width: 320, height: 140 },
+      aspectRatio: 1.7778,
+      disableFlip: false,
+      rememberLastUsedCamera: true,
+      showTorchButtonIfSupported: true,
+      showZoomSliderIfSupported: true
     };
+
+    if (typeof Html5QrcodeSupportedFormats !== 'undefined') {
+      base.formatsToSupport = [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.QR_CODE
+      ];
+    }
+
+    base.experimentalFeatures = {
+      useBarCodeDetectorIfSupported: true
+    };
+
+    return base;
   }
 
   async function stop() {
@@ -148,6 +170,20 @@ window.KutuphaneCamera = (function () {
   function getReaderElementId() {
     return activeReaderElementId;
   }
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) {
+      await stop();
+    }
+  });
+
+  window.addEventListener('pagehide', async () => {
+    await stop();
+  });
+
+  window.addEventListener('beforeunload', async () => {
+    await stop();
+  });
 
   return {
     start,
