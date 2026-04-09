@@ -1,105 +1,9 @@
-function silTemizMesaj() {
-  const kutu = document.getElementById('mesajKutusu');
-  if (!kutu) return;
-  kutu.className = 'mesajKutusu';
-  kutu.innerHTML = '';
-}
-
-function silMesajGoster(mesaj, tip = 'success') {
-  const kutu = document.getElementById('mesajKutusu');
-  if (!kutu) return;
-  kutu.className = 'mesajKutusu mesaj-' + tip;
-  kutu.innerHTML = guvenliYazi(mesaj);
-}
-
-function silTemizIsbn(deger) {
-  if (window.KutuphaneCamera && window.KutuphaneCamera.temizKod) {
-    return window.KutuphaneCamera.temizKod(deger);
-  }
-  return String(deger || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
-}
-
-function silKitapKartHtml(kitap) {
-  const durum = String(kitap.durum || 'RAFTA').toUpperCase();
-  let badgeClass = 'rafta';
-  if (durum === 'ÖDÜNÇTE') badgeClass = 'oduncte';
-  if (durum === 'KAYIP') badgeClass = 'oduncte';
-
-  return `
-    <div class="kitapKart">
-      <div class="kitapBaslik">${guvenliYazi(kitap.kitapAdi || '-')}</div>
-      <div class="kitapSatir"><strong>Kitap Kodu:</strong> ${guvenliYazi(kitap.kitapKodu || '-')}</div>
-      <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(kitap.yazar || '-')}</div>
-      <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(kitap.isbn || '-')}</div>
-      <div class="kitapSatir"><strong>Yayınevi:</strong> ${guvenliYazi(kitap.yayinevi || '-')}</div>
-      <div class="kitapSatir"><strong>Yıl:</strong> ${guvenliYazi(kitap.yayinYili || '-')}</div>
-      <div class="durumBadge ${badgeClass}">${guvenliYazi(durum)}</div>
-    </div>
-  `;
-}
-
-async function silApiPost(payload) {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return await response.json();
-}
-
-async function silTumKitaplariGetir() {
-  const sonuc = await silApiPost({ action: 'booksList' });
-  if (!sonuc.ok) {
-    throw new Error(sonuc.error || 'Kitap listesi alınamadı');
-  }
-  return sonuc.data || [];
-}
-
-async function kameraKapatSil() {
-  try {
-    if (window.KutuphaneCamera) {
-      await window.KutuphaneCamera.stop();
-    }
-    const wrap = document.getElementById('scannerWrap');
-    const reader = document.getElementById('reader');
-    if (wrap) wrap.style.display = 'none';
-    if (reader) reader.innerHTML = '';
-  } catch (err) {}
-}
-
 async function kamerayiBaslatSil() {
-  silTemizMesaj();
-
-  if (!window.KutuphaneCamera) {
-    silMesajGoster('Kamera modülü yüklenemedi', 'error');
-    return;
-  }
-
-  try {
-    await window.KutuphaneCamera.start({
-      readerId: 'reader',
-      wrapId: 'scannerWrap',
-      config: {
-        fps: 5,
-        qrbox: { width: 280, height: 90 },
-        aspectRatio: 1.7778
-      },
-      onDetected: async (isbn) => {
-        const isbnInput = document.getElementById('silIsbn');
-        if (isbnInput) isbnInput.value = isbn;
-
-        silMesajGoster('ISBN okundu: ' + isbn, 'success');
-        await kameraKapatSil();
-        await silKitapBul();
-      }
-    });
-  } catch (err) {
-    await kameraKapatSil();
-    silMesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
-  }
+  await kameraBaslat({
+    inputId: 'silIsbn',
+    successMessage: 'ISBN okundu: ',
+    onDetected: silKitapBul
+  });
 }
 
 function silForm() {
@@ -281,7 +185,7 @@ function silForm() {
 
       <div class="topActions">
         <button class="actionBtn blueBtn" onclick="kamerayiBaslatSil()">📷 Kamera ile ISBN Okut</button>
-        <button class="actionBtn grayBtn" onclick="kameraKapatSil()">Kamerayı Kapat</button>
+        <button class="actionBtn grayBtn" onclick="kameraKapat()">Kamerayı Kapat</button>
       </div>
 
       <div id="scannerWrap" class="scannerWrap">
@@ -309,58 +213,58 @@ function silForm() {
 }
 
 async function silKitapBul(suppressStatusMessage = false) {
-  silTemizMesaj();
+  temizMesaj();
   window.seciliSilKitap = null;
 
   const alan = document.getElementById('silKitapAlani');
   if (alan) alan.innerHTML = '';
 
   try {
-    const isbn = silTemizIsbn(document.getElementById('silIsbn')?.value || '');
+    const isbn = temizIsbn(document.getElementById('silIsbn')?.value || '');
     if (!isbn) {
-      silMesajGoster('Önce ISBN girin veya okutun', 'warn');
+      mesajGoster('Önce ISBN girin veya okutun', 'warn');
       return;
     }
 
-    const kitaplar = await silTumKitaplariGetir();
-    const kitap = kitaplar.find(k => silTemizIsbn(k.isbn || '') === isbn);
+    const kitaplar = await tumKitaplariGetir();
+    const kitap = kitaplar.find(k => temizIsbn(k.isbn || '') === isbn);
 
     if (!kitap) {
-      silMesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
+      mesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
       return;
     }
 
     window.seciliSilKitap = kitap;
 
-    if (alan) alan.innerHTML = silKitapKartHtml(kitap);
-
-    if (suppressStatusMessage) {
-      return;
+    if (alan) {
+      alan.innerHTML = kitapKartHtml(kitap);
     }
+
+    if (suppressStatusMessage) return;
 
     if (String(kitap.durum || '').toUpperCase() === 'ÖDÜNÇTE') {
-      silMesajGoster('Bu kitap ödünçte. Silmek yerine kayıp olarak işaretleyebilirsin.', 'warn');
+      mesajGoster('Bu kitap ödünçte. Silmek yerine kayıp olarak işaretleyebilirsin.', 'warn');
     } else if (String(kitap.durum || '').toUpperCase() === 'KAYIP') {
-      silMesajGoster('Bu kitap zaten kayıp olarak işaretlenmiş.', 'warn');
+      mesajGoster('Bu kitap zaten kayıp olarak işaretlenmiş.', 'warn');
     } else {
-      silMesajGoster('Kitap bulundu', 'success');
+      mesajGoster('Kitap bulundu', 'success');
     }
   } catch (err) {
-    silMesajGoster('Arama hatası: ' + err.message, 'error');
+    mesajGoster('Arama hatası: ' + err.message, 'error');
   }
 }
 
 async function kitapKayipYap() {
-  silTemizMesaj();
+  temizMesaj();
 
   const kitap = window.seciliSilKitap;
   if (!kitap) {
-    silMesajGoster('Önce kitabı bulun', 'warn');
+    mesajGoster('Önce kitabı bulun', 'warn');
     return;
   }
 
   if (String(kitap.durum || '').toUpperCase() === 'KAYIP') {
-    silMesajGoster('Bu kitap zaten kayıp olarak işaretlenmiş', 'warn');
+    mesajGoster('Bu kitap zaten kayıp olarak işaretlenmiş', 'warn');
     return;
   }
 
@@ -371,34 +275,34 @@ async function kitapKayipYap() {
   if (!onay) return;
 
   try {
-    const sonuc = await silApiPost({
+    const sonuc = await apiPost({
       action: 'markLost',
       id: kitap.id
     });
 
     if (!sonuc.ok) {
-      silMesajGoster(sonuc.error || 'Kayıp işaretleme hatası', 'error');
+      mesajGoster(sonuc.error || 'Kayıp işaretleme hatası', 'error');
       return;
     }
 
     await silKitapBul(true);
-    silMesajGoster(sonuc.message || 'Kitap kayıp olarak işaretlendi', 'success');
+    mesajGoster(sonuc.message || 'Kitap kayıp olarak işaretlendi', 'success');
   } catch (err) {
-    silMesajGoster('Kayıp işaretleme hatası: ' + err.message, 'error');
+    mesajGoster('Kayıp işaretleme hatası: ' + err.message, 'error');
   }
 }
 
 async function kitapSil() {
-  silTemizMesaj();
+  temizMesaj();
 
   const kitap = window.seciliSilKitap;
   if (!kitap) {
-    silMesajGoster('Önce kitabı bulun', 'warn');
+    mesajGoster('Önce kitabı bulun', 'warn');
     return;
   }
 
   if (String(kitap.durum || '').toUpperCase() === 'ÖDÜNÇTE') {
-    silMesajGoster('Ödünçte olan kitap silinemez. Kayıp olarak işaretleyebilirsin.', 'error');
+    mesajGoster('Ödünçte olan kitap silinemez. Kayıp olarak işaretleyebilirsin.', 'error');
     return;
   }
 
@@ -409,23 +313,23 @@ async function kitapSil() {
   if (!onay) return;
 
   try {
-    const sonuc = await silApiPost({
+    const sonuc = await apiPost({
       action: 'deleteBook',
       id: kitap.id
     });
 
     if (!sonuc.ok) {
-      silMesajGoster(sonuc.error || 'Silme hatası', 'error');
+      mesajGoster(sonuc.error || 'Silme hatası', 'error');
       return;
     }
 
-    silMesajGoster(sonuc.message || 'Kitap silindi', 'success');
+    mesajGoster(sonuc.message || 'Kitap silindi', 'success');
 
     document.getElementById('silIsbn').value = '';
     const alan = document.getElementById('silKitapAlani');
     if (alan) alan.innerHTML = '';
     window.seciliSilKitap = null;
   } catch (err) {
-    silMesajGoster('Silme hatası: ' + err.message, 'error');
+    mesajGoster('Silme hatası: ' + err.message, 'error');
   }
 }
