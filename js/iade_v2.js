@@ -1,106 +1,9 @@
-function iadeTemizMesaj() {
-  const kutu = document.getElementById('mesajKutusu');
-  if (!kutu) return;
-  kutu.className = 'mesajKutusu';
-  kutu.innerHTML = '';
-}
-
-function iadeMesajGoster(mesaj, tip = 'success') {
-  const kutu = document.getElementById('mesajKutusu');
-  if (!kutu) return;
-  kutu.className = 'mesajKutusu mesaj-' + tip;
-  kutu.innerHTML = guvenliYazi(mesaj);
-}
-
-function iadeKitapKartHtml(kitap) {
-  const durum = String(kitap.durum || 'RAFTA').toUpperCase();
-  const badgeClass = durum === 'ÖDÜNÇTE' ? 'oduncte' : 'rafta';
-
-  return `
-    <div class="kitapKart">
-      <div class="kitapBaslik">${guvenliYazi(kitap.kitapAdi || '-')}</div>
-      <div class="kitapSatir"><strong>Kitap Kodu:</strong> ${guvenliYazi(kitap.kitapKodu || '-')}</div>
-      <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(kitap.yazar || '-')}</div>
-      <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(kitap.isbn || '-')}</div>
-      <div class="kitapSatir"><strong>Yayınevi:</strong> ${guvenliYazi(kitap.yayinevi || '-')}</div>
-      <div class="kitapSatir"><strong>Yıl:</strong> ${guvenliYazi(kitap.yayinYili || '-')}</div>
-      <div class="kitapSatir"><strong>Ödünç Alan:</strong> ${guvenliYazi(kitap.oduncAlan || '-')}</div>
-      <div class="kitapSatir"><strong>Ödünç Tarihi:</strong> ${guvenliYazi(kitap.oduncTarihi || '-')}</div>
-      <div class="kitapSatir"><strong>İade Tarihi:</strong> ${guvenliYazi(kitap.iadeTarihi || '-')}</div>
-      <div class="durumBadge ${badgeClass}">${guvenliYazi(durum)}</div>
-    </div>
-  `;
-}
-
-async function iadeApiPost(payload) {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return await response.json();
-}
-
-async function iadeTumKitaplariGetir() {
-  const sonuc = await iadeApiPost({ action: 'booksList' });
-  if (!sonuc.ok) {
-    throw new Error(sonuc.error || 'Kitap listesi alınamadı');
-  }
-  return sonuc.data || [];
-}
-
-function iadeTemizIsbn(deger) {
-  if (window.KutuphaneCamera && window.KutuphaneCamera.temizKod) {
-    return window.KutuphaneCamera.temizKod(deger);
-  }
-  return String(deger || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
-}
-
-async function kameraKapatIade() {
-  try {
-    if (window.KutuphaneCamera) {
-      await window.KutuphaneCamera.stop();
-    }
-    const wrap = document.getElementById('scannerWrap');
-    const reader = document.getElementById('reader');
-    if (wrap) wrap.style.display = 'none';
-    if (reader) reader.innerHTML = '';
-  } catch (err) {}
-}
-
 async function kamerayiBaslatIade() {
-  iadeTemizMesaj();
-
-  if (!window.KutuphaneCamera) {
-    iadeMesajGoster('Kamera modülü yüklenemedi', 'error');
-    return;
-  }
-
-  try {
-    await window.KutuphaneCamera.start({
-      readerId: 'reader',
-      wrapId: 'scannerWrap',
-      config: {
-        fps: 5,
-        qrbox: { width: 280, height: 90 },
-        aspectRatio: 1.7778
-      },
-      onDetected: async (isbn) => {
-        const isbnInput = document.getElementById('iadeIsbn');
-        if (isbnInput) isbnInput.value = isbn;
-
-        iadeMesajGoster('ISBN okundu: ' + isbn, 'success');
-        await kameraKapatIade();
-        await iadeKitapBul();
-      }
-    });
-  } catch (err) {
-    await kameraKapatIade();
-    iadeMesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
-  }
+  await kameraBaslat({
+    inputId: 'iadeIsbn',
+    successMessage: 'ISBN okundu: ',
+    onDetected: iadeKitapBul
+  });
 }
 
 function iadeForm() {
@@ -281,7 +184,7 @@ function iadeForm() {
 
       <div class="topActions">
         <button class="actionBtn blueBtn" onclick="kamerayiBaslatIade()">📷 Kamera ile ISBN Okut</button>
-        <button class="actionBtn grayBtn" onclick="kameraKapatIade()">Kamerayı Kapat</button>
+        <button class="actionBtn grayBtn" onclick="kameraKapat()">Kamerayı Kapat</button>
       </div>
 
       <div id="scannerWrap" class="scannerWrap">
@@ -308,71 +211,77 @@ function iadeForm() {
 }
 
 async function iadeKitapBul(suppressStatusMessage = false) {
-  iadeTemizMesaj();
+  temizMesaj();
   window.seciliIadeKitap = null;
 
   const alan = document.getElementById('iadeKitapAlani');
   if (alan) alan.innerHTML = '';
 
   try {
-    const isbn = iadeTemizIsbn(document.getElementById('iadeIsbn')?.value || '');
+    const isbn = temizIsbn(document.getElementById('iadeIsbn')?.value || '');
     if (!isbn) {
-      iadeMesajGoster('Önce ISBN girin veya okutun', 'warn');
+      mesajGoster('Önce ISBN girin veya okutun', 'warn');
       return;
     }
 
-    const kitaplar = await iadeTumKitaplariGetir();
-    const kitap = kitaplar.find(k => iadeTemizIsbn(k.isbn || '') === isbn);
+    const kitaplar = await tumKitaplariGetir();
+    const kitap = kitaplar.find(k => temizIsbn(k.isbn || '') === isbn);
 
     if (!kitap) {
-      iadeMesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
+      mesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
       return;
     }
 
     window.seciliIadeKitap = kitap;
 
-    if (alan) alan.innerHTML = iadeKitapKartHtml(kitap);
+    if (alan) {
+      alan.innerHTML = kitapKartHtml(kitap, `
+        <div class="kitapSatir"><strong>Ödünç Alan:</strong> ${guvenliYazi(kitap.oduncAlan || '-')}</div>
+        <div class="kitapSatir"><strong>Ödünç Tarihi:</strong> ${guvenliYazi(kitap.oduncTarihi || '-')}</div>
+        <div class="kitapSatir"><strong>İade Tarihi:</strong> ${guvenliYazi(kitap.iadeTarihi || '-')}</div>
+      `);
+    }
 
     if (suppressStatusMessage) return;
 
     if (String(kitap.durum || '').toUpperCase() !== 'ÖDÜNÇTE') {
-      iadeMesajGoster('Bu kitap zaten rafta', 'warn');
+      mesajGoster('Bu kitap zaten rafta', 'warn');
     } else {
-      iadeMesajGoster('Kitap bulundu', 'success');
+      mesajGoster('Kitap bulundu', 'success');
     }
   } catch (err) {
-    iadeMesajGoster('Arama hatası: ' + err.message, 'error');
+    mesajGoster('Arama hatası: ' + err.message, 'error');
   }
 }
 
 async function iadeAl() {
-  iadeTemizMesaj();
+  temizMesaj();
 
   const kitap = window.seciliIadeKitap;
   if (!kitap) {
-    iadeMesajGoster('Önce kitabı bulun', 'warn');
+    mesajGoster('Önce kitabı bulun', 'warn');
     return;
   }
 
   if (String(kitap.durum || '').toUpperCase() !== 'ÖDÜNÇTE') {
-    iadeMesajGoster('Bu kitap zaten rafta', 'warn');
+    mesajGoster('Bu kitap zaten rafta', 'warn');
     return;
   }
 
   try {
-    const sonuc = await iadeApiPost({
+    const sonuc = await apiPost({
       action: 'returnBook',
       id: kitap.id
     });
 
     if (!sonuc.ok) {
-      iadeMesajGoster(sonuc.error || 'İade alma hatası', 'error');
+      mesajGoster(sonuc.error || 'İade alma hatası', 'error');
       return;
     }
 
     await iadeKitapBul(true);
-    iadeMesajGoster(sonuc.message || 'Kitap iade alındı', 'success');
+    mesajGoster(sonuc.message || 'Kitap iade alındı', 'success');
   } catch (err) {
-    iadeMesajGoster('İade alma hatası: ' + err.message, 'error');
+    mesajGoster('İade alma hatası: ' + err.message, 'error');
   }
 }
