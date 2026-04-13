@@ -1,4 +1,7 @@
-// js/hizli_ekle.js — v55
+// js/hizli_ekle.js — v56
+// v56: kamera alanı sabit height:120px, position:sticky top:0,
+//      aspectRatio:2.8 (daha kısa görüntü), restartNormal() her barkod sonrası
+//      (hassas mod geçici, her döngü normal moddan başlar)
 // Bağımlılıklar: api.js (API_URL), utils.js (guvenliYazi, temizIsbn, getUserKey), camera.js (KutuphaneCamera)
 
 (function () {
@@ -164,10 +167,19 @@
     kuyruk.unshift(kayit);
     kuyrukRender();
 
-    if (kayit.zatenKayitli)          bannerGoster('kayitli',    `Sistemde kayıtlı: ${kayit.kitapAdi || temiz}`);
+    if (kayit.zatenKayitli)              bannerGoster('kayitli',    `Sistemde kayıtlı: ${kayit.kitapAdi || temiz}`);
     else if (kayit.durum === 'hazir')    bannerGoster('hazir',      kayit.kitapAdi);
     else if (kayit.durum === 'eksik')    bannerGoster('eksik',      `Eksik bilgi: ${kayit.kitapAdi || temiz}`);
     else                                 bannerGoster('bulunamadi', `Bulunamadı: ${temiz}`);
+  }
+
+  // ── Watermark sıfırla (normal moda dönüldüğünde) ──────────────────────────
+  function _watermarkSifirla() {
+    const wm = document.getElementById('hizliWatermark');
+    if (!wm) return;
+    wm.textContent      = 'Küçük barkodlar için 3 sn bekleyin';
+    wm.style.color      = 'rgba(255,255,255,0.38)';
+    wm.style.fontWeight = 'normal';
   }
 
   // ── Kamera ────────────────────────────────────────────────────────────────
@@ -181,23 +193,34 @@
         readerId:   'hizliReader',
         wrapId:     'hizliScannerWrap',
         adaptifMod: true,
+        config: { aspectRatio: 2.8 }, // v56: daha kısa kamera görüntüsü
         onAdaptif: () => {
           const wm = document.getElementById('hizliWatermark');
           if (!wm) return;
-          wm.textContent   = 'Hassas mod aktif';
-          wm.style.color   = 'rgba(255,255,255,0.75)';
+          wm.textContent      = 'Hassas mod aktif';
+          wm.style.color      = 'rgba(255,255,255,0.75)';
           wm.style.fontWeight = 'bold';
-          setTimeout(() => {
-            if (!wm) return;
-            wm.textContent      = 'Küçük barkodlar için 3 sn bekleyin';
-            wm.style.color      = 'rgba(255,255,255,0.38)';
-            wm.style.fontWeight = 'normal';
-          }, 2500);
+          // NOT: watermark normal moda dönünce restartNormal() ile sıfırlanır
         },
         onDetected: async (isbn) => {
           await isbnIslendi(isbn);
+          // v56: hassas moddaysa normal moda geri dön — her döngü temiz başlar
+          if (window.KutuphaneCamera && window.KutuphaneCamera.isAdaptifAktif()) {
+            _watermarkSifirla();
+            await window.KutuphaneCamera.restartNormal();
+          }
         }
       });
+
+      // v56: kamera başlayınca wrap'ı ekranın üstüne sabitle
+      const wrap = document.getElementById('hizliScannerWrap');
+      if (wrap) {
+        wrap.style.position = 'sticky';
+        wrap.style.top      = '0';
+        wrap.style.zIndex   = '40';
+        wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
     } catch (err) {
       bannerGoster('bulunamadi', 'Kamera açılamadı: ' + (err.message || err));
     }
@@ -207,8 +230,14 @@
     if (window.KutuphaneCamera) await window.KutuphaneCamera.stop();
     const wrap   = document.getElementById('hizliScannerWrap');
     const reader = document.getElementById('hizliReader');
-    if (wrap)   wrap.style.display = 'none';
-    if (reader) reader.innerHTML   = '';
+    if (wrap) {
+      wrap.style.display  = 'none';
+      // v56: sticky'yi temizle — kamera kapatılınca normal akışa dön
+      wrap.style.position = 'relative';
+      wrap.style.top      = '';
+      wrap.style.zIndex   = '';
+    }
+    if (reader) reader.innerHTML = '';
   }
 
   // ── Toplu Kaydet ──────────────────────────────────────────────────────────
@@ -290,13 +319,13 @@
           ⚡ Hızlı Ekle
         </div>
 
-        <!-- kamera alanı — üst 1/3, watermark overlay ile -->
+        <!-- kamera alanı — sabit yükseklik, watermark overlay ile -->
         <div id="hizliScannerWrap" style="
           position:relative;display:none;border-radius:14px;
           overflow:hidden;background:#111;margin-bottom:8px;
         ">
           <div id="hizliReader" style="
-            width:100%;min-height:160px;background:#000;
+            width:100%;height:120px;background:#000;
             touch-action:manipulation;
           "></div>
           <div id="hizliWatermark" style="
