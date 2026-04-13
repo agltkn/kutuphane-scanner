@@ -1,14 +1,41 @@
+// js/ekle.js
+// KutuphaneCamera API'sine taşındı, duplicate temizlendi
+
+// ── Kamera ────────────────────────────────────────────────────────────────
 async function kamerayiBaslatEkle() {
-  await kameraBaslat({
-    inputId: 'isbn',
-    successMessage: 'ISBN okundu: ',
-    fps: 8,
-    qrWidth: 320,
-    qrHeight: 140,
-    onDetected: isbnBilgisiGetir
-  });
+  if (!window.KutuphaneCamera) {
+    mesajGoster('Kamera modülü yüklenemedi', 'error');
+    return;
+  }
+  try {
+    await window.KutuphaneCamera.start({
+      readerId:   'reader',
+      wrapId:     'scannerWrap',
+      adaptifMod: true,
+      onAdaptif: () => {
+        const hint = document.getElementById('ekleHint');
+        if (hint) hint.textContent = '🔍 Küçük barkod modu aktif — barkodu yaklaştırın';
+      },
+      onDetected: async (isbn) => {
+        const el = document.getElementById('isbn');
+        if (el) el.value = isbn;
+        await isbnBilgisiGetir();
+      }
+    });
+  } catch (err) {
+    mesajGoster('Kamera açılamadı: ' + (err.message || err), 'error');
+  }
 }
 
+async function kameraKapat() {
+  if (window.KutuphaneCamera) await window.KutuphaneCamera.stop();
+  const wrap   = document.getElementById('scannerWrap');
+  const reader = document.getElementById('reader');
+  if (wrap)   wrap.style.display = 'none';
+  if (reader) reader.innerHTML   = '';
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────
 function ekleForm() {
   const alan = document.getElementById('formAlani');
   if (!alan) return;
@@ -218,9 +245,9 @@ function ekleForm() {
 
       <div id="scannerWrap" class="scannerWrap">
         <div id="reader"></div>
-        <div class="scanHelp">
+        <div id="ekleHint" class="scanHelp">
           Barkodu kutuya ortalayın.<br>
-          Okunmazsa barkod altındaki 13 haneli ISBN’yi elle girin.
+          Okunmazsa barkod altındaki 13 haneli ISBN'yi elle girin.
         </div>
       </div>
 
@@ -257,6 +284,7 @@ function ekleForm() {
   }, 100);
 }
 
+// ── ISBN Lookup ───────────────────────────────────────────────────────────
 async function isbnBilgisiGetir() {
   temizMesaj();
 
@@ -281,7 +309,7 @@ async function isbnBilgisiGetir() {
       return;
     }
 
-    const data = sonuc.data || {};
+    const data      = sonuc.data || {};
     const kartAlani = document.getElementById('ekleKitapAlani');
     if (kartAlani) kartAlani.innerHTML = '';
 
@@ -290,10 +318,10 @@ async function isbnBilgisiGetir() {
       return;
     }
 
-    document.getElementById('isbn').value = data.isbn || '';
-    document.getElementById('kitapAdi').value = data.kitapAdi || '';
-    document.getElementById('yazar').value = data.yazar || '';
-    document.getElementById('yayinevi').value = data.yayinevi || '';
+    document.getElementById('isbn').value      = data.isbn      || '';
+    document.getElementById('kitapAdi').value  = data.kitapAdi  || '';
+    document.getElementById('yazar').value     = data.yazar     || '';
+    document.getElementById('yayinevi').value  = data.yayinevi  || '';
     document.getElementById('yayinYili').value = data.yayinYili || '';
 
     if (kartAlani) {
@@ -337,18 +365,19 @@ async function isbnBilgisiGetir() {
   }
 }
 
+// ── Kaydet ────────────────────────────────────────────────────────────────
 async function kitapEkle() {
   temizMesaj();
 
   const payload = {
-    action: 'bookAdd',
-    userKey: getUserKey(),
-    isbn: temizIsbn(document.getElementById('isbn')?.value || ''),
-    kitapAdi: (document.getElementById('kitapAdi')?.value || '').trim(),
-    yazar: (document.getElementById('yazar')?.value || '').trim(),
-    yayinevi: (document.getElementById('yayinevi')?.value || '').trim(),
+    action:    'bookAdd',
+    userKey:   getUserKey(),
+    isbn:      temizIsbn(document.getElementById('isbn')?.value      || ''),
+    kitapAdi:  (document.getElementById('kitapAdi')?.value  || '').trim(),
+    yazar:     (document.getElementById('yazar')?.value     || '').trim(),
+    yayinevi:  (document.getElementById('yayinevi')?.value  || '').trim(),
     yayinYili: (document.getElementById('yayinYili')?.value || '').trim(),
-    notText: (document.getElementById('notText')?.value || '').trim()
+    notText:   (document.getElementById('notText')?.value   || '').trim()
   };
 
   if (!payload.kitapAdi || !payload.yazar) {
@@ -372,12 +401,12 @@ async function kitapEkle() {
 
     mesajGoster(mesaj || 'Kitap kaydedildi', 'success');
 
-    document.getElementById('isbn').value = '';
-    document.getElementById('kitapAdi').value = '';
-    document.getElementById('yazar').value = '';
-    document.getElementById('yayinevi').value = '';
+    document.getElementById('isbn').value      = '';
+    document.getElementById('kitapAdi').value  = '';
+    document.getElementById('yazar').value     = '';
+    document.getElementById('yayinevi').value  = '';
     document.getElementById('yayinYili').value = '';
-    document.getElementById('notText').value = '';
+    document.getElementById('notText').value   = '';
 
     const kartAlani = document.getElementById('ekleKitapAlani');
     if (kartAlani) kartAlani.innerHTML = '';

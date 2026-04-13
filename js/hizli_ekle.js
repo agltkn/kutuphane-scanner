@@ -1,4 +1,4 @@
-// js/hizli_ekle.js — v52
+// js/hizli_ekle.js — v53
 // Bağımlılıklar: api.js (API_URL), utils.js (guvenliYazi, temizIsbn, getUserKey), camera.js (KutuphaneCamera)
 
 (function () {
@@ -205,9 +205,13 @@
     }
     try {
       await window.KutuphaneCamera.start({
-        readerId: 'hizliReader',
-        wrapId:   'hizliScannerWrap',
-        config: { fps: 10, qrbox: { width: 300, height: 120 }, aspectRatio: 1.7778 },
+        readerId:   'hizliReader',
+        wrapId:     'hizliScannerWrap',
+        adaptifMod: true,
+        onAdaptif: () => {
+          const hint = document.getElementById('hizliScanHint');
+          if (hint) hint.textContent = '🔍 Küçük barkod modu aktif — barkodu yaklaştırın';
+        },
         onDetected: async (isbn) => {
           await isbnIslendi(isbn);
           // stop çağrılmaz — kamera akışı devam eder
@@ -343,7 +347,7 @@
             width:100%;min-height:240px;border-radius:12px;
             overflow:hidden;background:#000;touch-action:manipulation;
           "></div>
-          <div style="
+          <div id="hizliScanHint" style="
             margin-top:10px;color:#fff;background:rgba(255,255,255,0.08);
             padding:10px 12px;border-radius:12px;font-size:14px;line-height:1.5;
           ">Barkodu kutuya ortalayın. Her okuma sonrası kamera devam eder.</div>
