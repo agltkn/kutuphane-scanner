@@ -1,4 +1,4 @@
-// js/hizli_ekle.js — v53
+// js/hizli_ekle.js — v54
 // Bağımlılıklar: api.js (API_URL), utils.js (guvenliYazi, temizIsbn, getUserKey), camera.js (KutuphaneCamera)
 
 (function () {
@@ -210,7 +210,7 @@
         adaptifMod: true,
         onAdaptif: () => {
           const hint = document.getElementById('hizliScanHint');
-          if (hint) hint.textContent = '🔍 Küçük barkod modu aktif — barkodu yaklaştırın';
+          if (hint) hint.textContent = '🔍 Hassas mod aktif — barkodu yaklaştırın';
         },
         onDetected: async (isbn) => {
           await isbnIslendi(isbn);
@@ -350,7 +350,7 @@
           <div id="hizliScanHint" style="
             margin-top:10px;color:#fff;background:rgba(255,255,255,0.08);
             padding:10px 12px;border-radius:12px;font-size:14px;line-height:1.5;
-          ">Barkodu kutuya ortalayın. Her okuma sonrası kamera devam eder.</div>
+          ">Barkodu kutuya ortalayın. Her okuma sonrası kamera devam eder.<br>Küçük barkodlar için 3 sn bekleyin, hassas mod otomatik açılır.</div>
         </div>
 
         <div id="hizliSayac" style="

@@ -14,7 +14,7 @@ async function kamerayiBaslatEkle() {
       adaptifMod: true,
       onAdaptif: () => {
         const hint = document.getElementById('ekleHint');
-        if (hint) hint.textContent = '🔍 Küçük barkod modu aktif — barkodu yaklaştırın';
+        if (hint) hint.textContent = '🔍 Hassas mod aktif — barkodu yaklaştırın';
       },
       onDetected: async (isbn) => {
         const el = document.getElementById('isbn');
@@ -246,7 +246,7 @@ function ekleForm() {
       <div id="scannerWrap" class="scannerWrap">
         <div id="reader"></div>
         <div id="ekleHint" class="scanHelp">
-          Barkodu kutuya ortalayın.<br>
+          Barkodu kutuya ortalayın. Küçük barkodlar için 3 sn bekleyin, hassas mod otomatik açılır.<br>
           Okunmazsa barkod altındaki 13 haneli ISBN'yi elle girin.
         </div>
       </div>

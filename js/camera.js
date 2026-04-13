@@ -1,6 +1,6 @@
-// js/camera.js — v3
-// Html5Qrcode üzerinde EAN-13 odaklı, adaptif barkod okuyucu
-// v3: varsayilanConfig %90 genişlik, %45 yükseklik (büyük barkod iyileştirmesi)
+// js/camera.js — v4
+// v4: geçersiz barkod filtresi (uzunluk + EAN-13 checksum), adaptif 3s,
+//     lastScannedCode sadece start/stop kontrolünde, restart cooldown 600ms
 
 window.KutuphaneCamera = (function () {
 
@@ -11,11 +11,30 @@ window.KutuphaneCamera = (function () {
   let isStarting            = false;
   let adaptifTimer          = null;
 
-  // ── Yardımcı ──────────────────────────────────────────────────────────────
+  // ── temizKod: sadece EAN-8 (8) veya EAN-13 (13) uzunluğu kabul et ─────────
   function temizKod(text) {
-    return String(text || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
+    const s = String(text || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
+    if (s.length !== 8 && s.length !== 13) return ''; // kısa/uzun → geçersiz
+    return s;
   }
 
+  // EAN-13 checksum doğrulaması (kitap ISBN barkodları için ek güvence)
+  function _ean13Gecerli(kod) {
+    if (!/^\d{13}$/.test(kod)) return false;
+    const d   = kod.split('').map(Number);
+    const sum = d.slice(0, 12).reduce((acc, v, i) => acc + v * (i % 2 === 0 ? 1 : 3), 0);
+    return (10 - (sum % 10)) % 10 === d[12];
+  }
+
+  // Barkod güvenilirlik kontrolü
+  function _barkodGecerli(kod) {
+    if (!kod) return false;
+    if (kod.length === 13) return _ean13Gecerli(kod); // checksum zorunlu
+    if (kod.length === 8)  return true;               // EAN-8: lib zaten doğrulamış
+    return false;
+  }
+
+  // ── Kamera seçici ─────────────────────────────────────────────────────────
   async function enUygunArkaKameraIdBul() {
     try {
       if (typeof Html5Qrcode === 'undefined' || !Html5Qrcode.getCameras) return null;
@@ -80,8 +99,6 @@ window.KutuphaneCamera = (function () {
   }
 
   // ── Normal config — büyük/orta barkodlar ──────────────────────────────────
-  // qrbox: container genişliğinin %90'ı, yükseklik genişliğin %45'i
-  // Büyük ISBN barkodları için daha geniş tarama alanı
   function varsayilanConfig() {
     return {
       ..._ortakAyarlar(),
@@ -94,8 +111,6 @@ window.KutuphaneCamera = (function () {
   }
 
   // ── Küçük barkod config ────────────────────────────────────────────────────
-  // Daha dar odak kutusu: barkod kutuyu doldurmak zorunda kalır → daha iyi decode
-  // fps 15, kutu %58 genişlik
   function kucukBarkodConfig() {
     return {
       ..._ortakAyarlar(),
@@ -107,7 +122,8 @@ window.KutuphaneCamera = (function () {
     };
   }
 
-  // ── İç stop — adaptifTimer/isStarting dokunmaz ────────────────────────────
+  // ── İç stop ───────────────────────────────────────────────────────────────
+  // lastScannedCode SIFIRLANMAZ — caller kontrolünde (adaptif koruma için)
   async function _stopInner() {
     if (activeReader) {
       try { await activeReader.stop(); }  catch (_) {}
@@ -115,19 +131,20 @@ window.KutuphaneCamera = (function () {
     }
     activeReader          = null;
     activeReaderElementId = null;
-    lastScannedCode       = '';
   }
 
-  // ── Dışa açık stop ─────────────────────────────────────────────────────────
+  // ── Dışa açık stop — her şeyi sıfırlar ───────────────────────────────────
   async function stop() {
     clearTimeout(adaptifTimer);
-    adaptifTimer = null;
+    adaptifTimer    = null;
     await _stopInner();
-    isStarting = false;
+    lastScannedCode = ''; // kullanıcı kapattı → temiz slate
+    isStarting      = false;
   }
 
   // ── Ortak scan başlatıcı ──────────────────────────────────────────────────
-  async function _scanBaslat(readerId, wrapId, scanConfig, onDetected, onError) {
+  // ignoreScanMs: restart sonrası bu süre decode sonuçları yoksayılır
+  async function _scanBaslat(readerId, wrapId, scanConfig, onDetected, onError, ignoreScanMs) {
     const readerEl = document.getElementById(readerId);
     const wrapEl   = wrapId ? document.getElementById(wrapId) : null;
     if (!readerEl) throw new Error('Reader alanı bulunamadı: ' + readerId);
@@ -137,18 +154,30 @@ window.KutuphaneCamera = (function () {
 
     activeReader          = new Html5Qrcode(readerId);
     activeReaderElementId = readerId;
-    lastScannedCode       = '';
+    // lastScannedCode DOKUNULMAZ — caller set ediyor
 
     const kameraId     = await enUygunArkaKameraIdBul();
     const cameraConfig = kameraId || { facingMode: 'environment' };
+    const ignoreUntil  = (ignoreScanMs > 0) ? (Date.now() + ignoreScanMs) : 0;
 
     await activeReader.start(
       cameraConfig,
       scanConfig,
       async decodedText => {
+        // 1. Restart cooldown — ilk N ms yoksay
+        if (ignoreUntil > 0 && Date.now() < ignoreUntil) return;
+
+        // 2. Uzunluk filtresi — sadece EAN-8 veya EAN-13
         const temiz = temizKod(decodedText);
-        if (!temiz || temiz === lastScannedCode) return;
-        // Başarılı okuma — adaptif zamanlayıcıyı iptal et
+        if (!temiz) return;
+
+        // 3. EAN-13 checksum — geçersizse çöp
+        if (!_barkodGecerli(temiz)) return;
+
+        // 4. Tekrar okuma koruması
+        if (temiz === lastScannedCode) return;
+
+        // ── Geçerli okuma ──
         clearTimeout(adaptifTimer);
         adaptifTimer    = null;
         lastScannedCode = temiz;
@@ -167,9 +196,9 @@ window.KutuphaneCamera = (function () {
       wrapId,
       onDetected,
       onError,
-      onAdaptif,   // () => void  — küçük barkod moduna geçilince çağrılır
-      adaptifMod,  // true        — 5s içinde okuma olmazsa otomatik geç
-      config       // varsayilanConfig'i override eder
+      onAdaptif,  // () => void — küçük mod aktifleşince çağrılır
+      adaptifMod, // true → 3s sonra otomatik küçük barkod moduna geç
+      config      // varsayilanConfig override
     } = options || {};
 
     if (!readerId || typeof onDetected !== 'function') {
@@ -186,22 +215,25 @@ window.KutuphaneCamera = (function () {
 
     try {
       await _stopInner();
+      lastScannedCode = ''; // taze başlangıç — sıfırla
 
       const scanConfig = { ...varsayilanConfig(), ...(config || {}) };
-      await _scanBaslat(readerId, wrapId, scanConfig, onDetected, onError);
+      await _scanBaslat(readerId, wrapId, scanConfig, onDetected, onError, 0);
 
-      // Adaptif mod: 5s içinde başarılı okuma olmadıysa küçük barkod config'e geç
       if (adaptifMod) {
         adaptifTimer = setTimeout(async () => {
-          if (activeReaderElementId !== readerId) return; // başka oturum açılmış
+          if (activeReaderElementId !== readerId) return;
+          const savedCode = lastScannedCode; // önceki kodu koru — çift ateşleme önler
           try {
             await _stopInner();
-            await _scanBaslat(readerId, wrapId, kucukBarkodConfig(), onDetected, onError);
+            lastScannedCode = savedCode;     // restore
+            // 600ms cooldown: restart sonrası anlık/bayat frame yoksayılır
+            await _scanBaslat(readerId, wrapId, kucukBarkodConfig(), onDetected, onError, 600);
             if (typeof onAdaptif === 'function') onAdaptif();
           } catch (_) {
             // geçiş başarısız — sessizce devam
           }
-        }, 5000);
+        }, 3000); // 5000 → 3000ms
       }
 
     } finally {
@@ -228,7 +260,7 @@ window.KutuphaneCamera = (function () {
     getReaderElementId,
     temizKod,
     varsayilanConfig,
-    kucukBarkodConfig  // yeni — ekle.js/hizli_ekle.js erişebilir
+    kucukBarkodConfig
   };
 
 })();
