@@ -1,4 +1,4 @@
-// js/hizli_ekle.js — v59
+// js/hizli_ekle.js — v60
 // v58 değişiklikleri:
 //   • kamera wrap sabit height:200px, her zaman görünür (layout kayması yok)
 //   • kamera kapalıyken placeholder gösterilir, kapat→display:none yok
@@ -366,9 +366,22 @@
     kuyrukRender();
   };
 
+  // v60: Html5Qrcode'un video elementini konteynere doğal oturtur
+  function _videoStyleDuzelt() {
+    if (document.getElementById('hizliVideoStyle')) return;
+    const s = document.createElement('style');
+    s.id = 'hizliVideoStyle';
+    s.textContent =
+      '#hizliReader video{width:100%!important;height:100%!important;' +
+      'object-fit:cover!important;position:absolute!important;inset:0!important;}' +
+      '#hizliReader{overflow:hidden!important;}';
+    document.head.appendChild(s);
+  }
+
   window.hizliEkleForm = function () {
     const alan = document.getElementById('formAlani');
     if (!alan) return;
+    _videoStyleDuzelt();
     kuyruk = [];
 
     alan.innerHTML = `

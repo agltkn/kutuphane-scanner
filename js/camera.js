@@ -1,5 +1,5 @@
-// js/camera.js — v6
-// v6: _isProcessing lock — onDetected çalışırken gelen tüm decode'lar bloke edilir.
+// js/camera.js — v7
+// v7: aspectRatio kaldırıldı — video konteynerle uyumlu render, zoom/crop yok.
 //     adaptif mod resetini camera.js kendi içinde yönetir (hizli_ekle.js çağırmasına gerek yok).
 //     onRestartNormal callback: dışarıya "normal moda döndüm" bildirimi.
 // v5: restartNormal() + isAdaptifAktif()
@@ -73,7 +73,8 @@ window.KutuphaneCamera = (function () {
   // ── Config ─────────────────────────────────────────────────────────────────
   function _ortakAyarlar() {
     const base = {
-      aspectRatio: 1.7778,
+      // aspectRatio kaldırıldı (v7): kamera kendi native oranında akıyor,
+      // Html5Qrcode video elementi konteynere doğal oturur, zoom/crop olmaz
       disableFlip: false,
       rememberLastUsedCamera: true,
       showTorchButtonIfSupported: true,
@@ -98,9 +99,11 @@ window.KutuphaneCamera = (function () {
     return {
       ..._ortakAyarlar(),
       fps: 12,
-      qrbox: (w, _h) => {
+      qrbox: (w, h) => {
+        // Konteyner yüksekliğine göre sığacak kadar geniş tarama kutusu
         const bw = Math.min(Math.round(w * 0.90), 380);
-        return { width: bw, height: Math.round(bw * 0.45) };
+        const bh = Math.min(Math.round(bw * 0.38), Math.round(h * 0.70));
+        return { width: bw, height: bh };
       }
     };
   }
