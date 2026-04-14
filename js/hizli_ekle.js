@@ -1,17 +1,21 @@
-// js/hizli_ekle.js — v60
-// v58 değişiklikleri:
-//   • kamera wrap sabit height:200px, her zaman görünür (layout kayması yok)
-//   • kamera kapalıyken placeholder gösterilir, kapat→display:none yok
-//   • bilgi alanı (banner + mini form) sabit alanda, liste max-height+scroll
-//   • ISBN bulunamazsa inline mini form: kitap adı + yazar girişi
-//   • mini form cevabı beklenirken _isProcessing lock aktif (camera.js garantisi)
-// Bağımlılıklar: api.js (API_URL), utils.js (guvenliYazi, temizIsbn, getUserKey), camera.js (KutuphaneCamera v6)
+// js/hizli_ekle.js — v61
+// v61:
+//   • _basHarfBuyut: her kelimenin ilk harfi büyük (TR locale)
+//   • isbnIslendi: API'den gelen kitapAdi + yazar title-case'e çekilir
+//   • _manuelGirisGoster: submit'te title-case uygulanır
+//   • _yazarListesiYukle: kütüphanedeki yazarları çeker (authorsList action)
+//   • yazar alanı autocomplete: yazdıkça eşleşen öneriler
+// v60: video style düzeltmesi
+// v59: mf.querySelector fix
+// v58: sabit kamera wrap, mini form, kuyruk
+// Bağımlılıklar: api.js (API_URL), utils.js (guvenliYazi, temizIsbn, getUserKey), camera.js (KutuphaneCamera v7)
 
 (function () {
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let kuyruk    = [];
-  let bannerTmr = null;
+  let kuyruk       = [];
+  let bannerTmr    = null;
+  let _yazarListesi = [];   // v61: kütüphanedeki yazarlar (autocomplete için)
 
   // ── Yardımcı ──────────────────────────────────────────────────────────────
   function _guvenli(v) {
@@ -32,6 +36,18 @@
     return typeof getUserKey === 'function' ? getUserKey() : 'demo-user';
   }
 
+  // v61: her kelimenin ilk harfi büyük, geri kalanı küçük (TR locale)
+  function _basHarfBuyut(str) {
+    return String(str || '').trim().replace(/\S+/g, function(w) {
+      if (!w) return w;
+      try {
+        return w.charAt(0).toLocaleUpperCase('tr') + w.slice(1).toLocaleLowerCase('tr');
+      } catch (_) {
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }
+    });
+  }
+
   function _durumHesapla(data) {
     const adi   = (data.kitapAdi || '').trim();
     const yazar = (data.yazar    || '').trim();
@@ -50,9 +66,32 @@
     );
   }
 
+  // v61: kütüphanedeki yazarları yükle (autocomplete için, non-blocking)
+  async function _yazarListesiYukle() {
+    try {
+      const sonuc = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'authorsList' })
+      }).then(r => r.json());
+      if (sonuc.ok && Array.isArray(sonuc.data)) {
+        // Title-case uygula + case-insensitive deduplicate
+        const map = new Map();
+        for (const y of sonuc.data) {
+          if (!y) continue;
+          const norm = _basHarfBuyut(y);
+          const key  = norm.toLocaleLowerCase('tr');
+          if (!map.has(key)) map.set(key, norm);
+        }
+        _yazarListesi = [...map.values()].sort((a, b) =>
+          a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr')
+        );
+      }
+    } catch (_) {}
+  }
+
   // ── Banner ─────────────────────────────────────────────────────────────────
   function bannerGoster(durum, mesaj) {
-    // Mini form varsa gizle
     const mf = document.getElementById('hizliMiniForm');
     if (mf) mf.style.display = 'none';
 
@@ -80,7 +119,6 @@
 
   // ── Manuel Giriş Mini Form ────────────────────────────────────────────────
   // Döner: Promise<{kitapAdi, yazar}|null>
-  // null → kullanıcı "Geç" seçti, bulunamadi olarak kuyruğa eklenecek
   function _manuelGirisGoster(isbn) {
     return new Promise(resolve => {
       const banner = document.getElementById('hizliBanner');
@@ -104,11 +142,20 @@
             border:1px solid #d1d5db;border-radius:8px;margin-bottom:6px;
             outline:none;background:#fff;
           ">
-          <input id="hizliMiniYazar" type="text" placeholder="Yazar *" autocomplete="off" style="
-            width:100%;box-sizing:border-box;padding:8px 10px;font-size:14px;
-            border:1px solid #d1d5db;border-radius:8px;margin-bottom:8px;
-            outline:none;background:#fff;
-          ">
+          <div style="position:relative;margin-bottom:8px">
+            <input id="hizliMiniYazar" type="text" placeholder="Yazar *" autocomplete="off" style="
+              width:100%;box-sizing:border-box;padding:8px 10px;font-size:14px;
+              border:1px solid #d1d5db;border-radius:8px;
+              outline:none;background:#fff;display:block;
+            ">
+            <div id="hizliYazarOneri" style="
+              display:none;position:absolute;left:0;right:0;top:100%;
+              background:#fff;border:1px solid #d1d5db;border-top:none;
+              border-radius:0 0 8px 8px;
+              box-shadow:0 4px 10px rgba(0,0,0,0.10);
+              z-index:100;max-height:150px;overflow-y:auto;
+            "></div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
             <button id="hizliMiniEkleBtn" style="
               padding:9px 6px;font-size:14px;font-weight:bold;border:none;
@@ -123,31 +170,67 @@
       `;
       mf.style.display = 'block';
 
-      // v59: mf.querySelector kullan — document.getElementById mobil/iOS'ta
-      // innerHTML ile eklenen elementleri bazen null döndürür
-      const adiEl   = mf.querySelector('#hizliMiniAdi');
-      const yazarEl = mf.querySelector('#hizliMiniYazar');
-      const ekleBtn = mf.querySelector('#hizliMiniEkleBtn');
-      const gecBtn  = mf.querySelector('#hizliMiniGecBtn');
+      // v59: mf.querySelector — mobil/iOS uyumlu
+      const adiEl    = mf.querySelector('#hizliMiniAdi');
+      const yazarEl  = mf.querySelector('#hizliMiniYazar');
+      const oneriDiv = mf.querySelector('#hizliYazarOneri');
+      const ekleBtn  = mf.querySelector('#hizliMiniEkleBtn');
+      const gecBtn   = mf.querySelector('#hizliMiniGecBtn');
 
+      // v61: submit'te title-case uygula
       function _submit() {
-        const adi   = (adiEl   ? adiEl.value.trim()   : '');
-        const yazar = (yazarEl ? yazarEl.value.trim() : '');
+        const adi   = _basHarfBuyut(adiEl   ? adiEl.value.trim()   : '');
+        const yazar = _basHarfBuyut(yazarEl ? yazarEl.value.trim() : '');
+        if (oneriDiv) oneriDiv.style.display = 'none';
         mf.style.display = 'none';
         resolve(adi || yazar ? { kitapAdi: adi, yazar } : null);
       }
       function _skip() {
+        if (oneriDiv) oneriDiv.style.display = 'none';
         mf.style.display = 'none';
         resolve(null);
       }
-      if (adiEl)   adiEl.addEventListener('keydown',   e => { if (e.key === 'Enter') { e.preventDefault(); yazarEl && yazarEl.focus(); } });
-      if (yazarEl) yazarEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _submit(); } });
+
+      // v61: yazar autocomplete
+      if (yazarEl && oneriDiv) {
+        yazarEl.addEventListener('input', function() {
+          const q = yazarEl.value.trim().toLocaleLowerCase('tr');
+          if (!q) { oneriDiv.style.display = 'none'; return; }
+          const eslesme = _yazarListesi
+            .filter(y => y.toLocaleLowerCase('tr').includes(q))
+            .slice(0, 6);
+          if (!eslesme.length) { oneriDiv.style.display = 'none'; return; }
+          oneriDiv.innerHTML = eslesme.map(function(y) {
+            return `<div style="
+              padding:8px 10px;cursor:pointer;font-size:13px;color:#1f2937;
+              border-bottom:1px solid #f3f4f6;
+            " data-y="${_guvenli(y)}">${_guvenli(y)}</div>`;
+          }).join('');
+          oneriDiv.style.display = 'block';
+          oneriDiv.querySelectorAll('div[data-y]').forEach(function(item) {
+            item.addEventListener('mousedown', function(e) {
+              e.preventDefault(); // blur tetiklememek için
+              yazarEl.value = item.dataset.y;
+              oneriDiv.style.display = 'none';
+            });
+          });
+        });
+        yazarEl.addEventListener('blur', function() {
+          setTimeout(function() { oneriDiv.style.display = 'none'; }, 150);
+        });
+        yazarEl.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') oneriDiv.style.display = 'none';
+        });
+      }
+
+      // Enter tuş yönlendirmesi
+      if (adiEl)   adiEl.addEventListener('keydown',   function(e) { if (e.key === 'Enter') { e.preventDefault(); yazarEl && yazarEl.focus(); } });
+      if (yazarEl) yazarEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _submit(); } });
 
       if (ekleBtn) ekleBtn.addEventListener('click', _submit);
       if (gecBtn)  gecBtn.addEventListener('click',  _skip);
 
-      // Odaklan
-      setTimeout(() => { if (adiEl) adiEl.focus(); }, 80);
+      setTimeout(function() { if (adiEl) adiEl.focus(); }, 80);
     });
   }
 
@@ -223,8 +306,9 @@
       }).then(r => r.json());
       if (sonuc.ok && sonuc.data) {
         const d = sonuc.data;
-        kayit.kitapAdi     = d.kitapAdi  || '';
-        kayit.yazar        = d.yazar     || '';
+        // v61: title-case standardı API verisine de uygula
+        kayit.kitapAdi     = _basHarfBuyut(d.kitapAdi  || '');
+        kayit.yazar        = _basHarfBuyut(d.yazar     || '');
         kayit.yayinevi     = d.yayinevi  || '';
         kayit.yayinYili    = d.yayinYili || '';
         kayit.zatenKayitli = !!(d.zatenKayitli);
@@ -244,7 +328,6 @@
         kayit.yazar    = manuel.yazar    || '';
         kayit.durum    = _durumHesapla(kayit);
       }
-      // manuel null ise bulunamadi olarak kuyruğa girer
     }
 
     kuyruk.unshift(kayit);
@@ -270,7 +353,7 @@
       bannerGoster('bulunamadi', 'Kamera modülü yüklenemedi');
       return;
     }
-    _placeholderGoster(false); // placeholder kapat, watermark hazır et
+    _placeholderGoster(false);
     try {
       await window.KutuphaneCamera.start({
         readerId:   'hizliReader',
@@ -307,7 +390,7 @@
     if (window.KutuphaneCamera) await window.KutuphaneCamera.stop();
     const reader = document.getElementById('hizliReader');
     if (reader) reader.innerHTML = '';
-    _placeholderGoster(true); // placeholder göster, wrap hep visible kalır
+    _placeholderGoster(true);
   }
 
   // ── Toplu Kaydet ──────────────────────────────────────────────────────────
@@ -366,7 +449,7 @@
     kuyrukRender();
   };
 
-  // v60: Html5Qrcode'un video elementini konteynere doğal oturtur
+  // v60: Html5Qrcode video elementini konteynere doğal oturtur
   function _videoStyleDuzelt() {
     if (document.getElementById('hizliVideoStyle')) return;
     const s = document.createElement('style');
@@ -382,6 +465,7 @@
     const alan = document.getElementById('formAlani');
     if (!alan) return;
     _videoStyleDuzelt();
+    _yazarListesiYukle(); // v61: arka planda yazar listesini yükle
     kuyruk = [];
 
     alan.innerHTML = `
@@ -400,7 +484,6 @@
           position:relative;height:200px;border-radius:14px;
           overflow:hidden;background:#111;margin-bottom:8px;
         ">
-          <!-- placeholder: kamera kapalıyken gösterilir -->
           <div id="hizliCameraPlaceholder" style="
             position:absolute;inset:0;display:flex;flex-direction:column;
             align-items:center;justify-content:center;
@@ -411,12 +494,10 @@
             <span>Başlat'a basarak kamerayı açın</span>
           </div>
 
-          <!-- kamera render alanı -->
           <div id="hizliReader" style="
             width:100%;height:100%;background:#000;touch-action:manipulation;
           "></div>
 
-          <!-- watermark (başlangıçta gizli, kamera açılınca gösterilir) -->
           <div id="hizliWatermark" style="
             position:absolute;bottom:8px;left:0;right:0;
             text-align:center;color:rgba(255,255,255,0.38);
@@ -438,7 +519,7 @@
         </div>
 
         <!-- ─── bilgi alanı: banner veya mini form ─── -->
-        <div id="hizliBilgiAlani" style="margin-bottom:6px;min-height:42px">
+        <div id="hizliBilgiAlani" style="margin-bottom:6px;min-height:42px;overflow:visible">
           <div id="hizliBanner" style="display:none"></div>
           <div id="hizliMiniForm" style="display:none"></div>
         </div>

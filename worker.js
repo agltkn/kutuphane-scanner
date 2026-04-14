@@ -372,6 +372,15 @@ export default {
       }
 
       // ─────────────────────────────────────────────────────────────────────
+      if (action === "authorsList") {
+        const rows = await env.DB
+          .prepare("SELECT DISTINCT author FROM books WHERE author != '' ORDER BY author ASC")
+          .all();
+        const yazarlar = (rows.results || []).map(r => r.author).filter(Boolean);
+        return jsonResponse({ ok: true, data: yazarlar }, 200, corsHeaders);
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
       if (action === "booksList") {
         const rows = await env.DB
           .prepare("SELECT * FROM books ORDER BY id DESC")
