@@ -1,4 +1,4 @@
-// js/hizli_ekle.js — v61
+// js/hizli_ekle.js — v62
 // v61:
 //   • _basHarfBuyut: her kelimenin ilk harfi büyük (TR locale)
 //   • isbnIslendi: API'den gelen kitapAdi + yazar title-case'e çekilir
@@ -66,16 +66,21 @@
     );
   }
 
-  // v61: kütüphanedeki yazarları yükle (autocomplete için, non-blocking)
+  // v62: kütüphanedeki yazarları yükle — API_URL guard + console log
   async function _yazarListesiYukle() {
+    // API_URL tanımsızsa sessizce dur (api.js henüz yüklenmediyse)
+    const apiUrl = (typeof API_URL !== 'undefined') ? API_URL : null;
+    if (!apiUrl) {
+      console.warn('[hizliEkle] _yazarListesiYukle: API_URL tanımsız, atlandı');
+      return;
+    }
     try {
-      const sonuc = await fetch(API_URL, {
+      const sonuc = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'authorsList' })
       }).then(r => r.json());
       if (sonuc.ok && Array.isArray(sonuc.data)) {
-        // Title-case uygula + case-insensitive deduplicate
         const map = new Map();
         for (const y of sonuc.data) {
           if (!y) continue;
@@ -86,8 +91,13 @@
         _yazarListesi = [...map.values()].sort((a, b) =>
           a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr')
         );
+        console.log('[hizliEkle] yazarListesi:', _yazarListesi.length, 'yazar yüklendi');
+      } else {
+        console.warn('[hizliEkle] authorsList yanıtı beklenmedik:', sonuc);
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('[hizliEkle] _yazarListesiYukle hata:', err);
+    }
   }
 
   // ── Banner ─────────────────────────────────────────────────────────────────
@@ -127,6 +137,9 @@
 
       if (banner) { clearTimeout(bannerTmr); banner.style.display = 'none'; }
 
+      // v62: form açılırken liste boşsa hemen yeniden yükle
+      if (_yazarListesi.length === 0) _yazarListesiYukle();
+
       mf.innerHTML = `
         <div style="
           background:#fff8e1;border:1px solid #f59e0b;border-radius:12px;
@@ -150,10 +163,10 @@
             ">
             <div id="hizliYazarOneri" style="
               display:none;position:absolute;left:0;right:0;top:100%;
-              background:#fff;border:1px solid #d1d5db;border-top:none;
-              border-radius:0 0 8px 8px;
-              box-shadow:0 4px 10px rgba(0,0,0,0.10);
-              z-index:100;max-height:150px;overflow-y:auto;
+              background:#fff;border:1px solid #d1d5db;
+              border-radius:8px;margin-top:2px;
+              box-shadow:0 6px 16px rgba(0,0,0,0.15);
+              z-index:9999;max-height:160px;overflow-y:auto;
             "></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -191,36 +204,34 @@
         resolve(null);
       }
 
-      // v61: yazar autocomplete
+      // v62: yazar autocomplete — liste dinamik okunur (fetch geç gelirse bile çalışır)
       if (yazarEl && oneriDiv) {
-        yazarEl.addEventListener('input', function() {
+        function _oneriGoster() {
           const q = yazarEl.value.trim().toLocaleLowerCase('tr');
+          console.log('[hizliEkle] autocomplete input:', q, '| liste:', _yazarListesi.length);
           if (!q) { oneriDiv.style.display = 'none'; return; }
           const eslesme = _yazarListesi
-            .filter(y => y.toLocaleLowerCase('tr').includes(q))
+            .filter(function(y) { return y.toLocaleLowerCase('tr').includes(q); })
             .slice(0, 6);
           if (!eslesme.length) { oneriDiv.style.display = 'none'; return; }
           oneriDiv.innerHTML = eslesme.map(function(y) {
-            return `<div style="
-              padding:8px 10px;cursor:pointer;font-size:13px;color:#1f2937;
-              border-bottom:1px solid #f3f4f6;
-            " data-y="${_guvenli(y)}">${_guvenli(y)}</div>`;
+            return '<div style="padding:8px 10px;cursor:pointer;font-size:13px;' +
+              'color:#1f2937;border-bottom:1px solid #f3f4f6;" data-y="' +
+              _guvenli(y) + '">' + _guvenli(y) + '</div>';
           }).join('');
           oneriDiv.style.display = 'block';
           oneriDiv.querySelectorAll('div[data-y]').forEach(function(item) {
             item.addEventListener('mousedown', function(e) {
-              e.preventDefault(); // blur tetiklememek için
+              e.preventDefault();
               yazarEl.value = item.dataset.y;
               oneriDiv.style.display = 'none';
             });
           });
-        });
-        yazarEl.addEventListener('blur', function() {
-          setTimeout(function() { oneriDiv.style.display = 'none'; }, 150);
-        });
-        yazarEl.addEventListener('keydown', function(e) {
-          if (e.key === 'Escape') oneriDiv.style.display = 'none';
-        });
+        }
+        yazarEl.addEventListener('input',   _oneriGoster);
+        yazarEl.addEventListener('keyup',   _oneriGoster); // iOS/Android için yedek
+        yazarEl.addEventListener('blur',    function() { setTimeout(function() { oneriDiv.style.display = 'none'; }, 180); });
+        yazarEl.addEventListener('keydown', function(e) { if (e.key === 'Escape') oneriDiv.style.display = 'none'; });
       }
 
       // Enter tuş yönlendirmesi
