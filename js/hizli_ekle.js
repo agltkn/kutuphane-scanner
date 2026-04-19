@@ -1,4 +1,7 @@
-// js/hizli_ekle.js — v68
+// js/hizli_ekle.js — v69
+// v69 — hizliTopluKaydet: k._basarili property mutation yerine Set<ref> takibi;
+//        if(basarili>0) guard kaldırıldı — filter her zaman çalışır.
+//        Root cause: basarili===0 durumunda filter hiç koşmuyordu.
 // v68 — forceEkle:true kayıtlarda kuyruk mesajı temizleniyor;
 //        kuyrukRender'da hataPill forceEkle durumunda gizleniyor.
 //        Root cause: isbnLookup'tan gelen d.mesaj forceEkle sonrası temizlenmiyordu.
@@ -535,7 +538,6 @@
 
   // ── Toplu Kaydet ──────────────────────────────────────────────────────────
   async function hizliTopluKaydet() {
-    // v66: sadece hazır ve forceEkle olanları gönder
     const adaylar = kuyruk.filter(k => k.durum === 'hazir' || k.forceEkle);
     if (!adaylar.length) {
       bannerGoster('bulunamadi', 'Kaydedilecek uygun kayıt yok');
@@ -546,6 +548,8 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor...'; }
 
     let basarili = 0, duplicate = 0, hatali = 0;
+    // v69: property mutation yerine referans bazlı Set takibi
+    const basariliSet = new Set();
 
     for (const k of adaylar) {
       try {
@@ -570,27 +574,24 @@
         if (!sonuc.ok) {
           k.mesaj = sonuc.error || 'Kayıt hatası'; hatali++;
         } else if (!k.forceEkle && _zatenVarMi(sonuc)) {
-          // Beklenmedik duplicate — sadece forceEkle olmayan kayıtlar için hata
-          // (forceEkle:true ise kullanıcı bilinçli ekledi → başarı say)
+          // Beklenmedik duplicate — forceEkle olmayan kayıtlar için hata
           k.mesaj = sonuc.message || 'Sistemde zaten mevcut'; duplicate++;
         } else {
-          // Başarılı (forceEkle olan kayıtlar için "zaten var" yanıtı da başarı)
-          k._basarili = true; k.mesaj = ''; basarili++;
+          // Başarılı — forceEkle:true için ok:true her zaman başarı sayılır
+          basariliSet.add(k);
+          k.mesaj = ''; basarili++;
         }
       } catch (err) {
         k.mesaj = 'Bağlantı hatası'; hatali++;
       }
     }
 
-    // v66: başarılı kayıtları kuyruktan tamamen çıkar
-    if (basarili > 0) {
-      kuyruk = kuyruk.filter(k => !k._basarili);
-    }
+    // v69: guard yok — filter her zaman çalışır, basariliSet boşsa no-op
+    kuyruk = kuyruk.filter(k => !basariliSet.has(k));
 
     kuyrukRender();
     if (btn) { btn.disabled = false; btn.textContent = '💾 Toplu Kaydet'; }
 
-    // Özet mesaj
     const parcalar = [];
     if (basarili)  parcalar.push(`${basarili} eklendi`);
     if (duplicate) parcalar.push(`${duplicate} tekrar`);
