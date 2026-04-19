@@ -1,4 +1,7 @@
-// js/hizli_ekle.js — v65
+// js/hizli_ekle.js — v66
+// v66 — Toplu Kaydet sonrası başarılı kayıtlar kuyruktan siliniyor;
+//        hatalı kayıtlar kuyrukta kalıyor, kullanıcı tekrar deneyebilir.
+//        yeniKaydedildi state'i kaldırıldı — artık gereksiz.
 // v65 — Duplicate ISBN akışı yeniden tasarlandı:
 //   • Otomatik bloklama YOK — her duplicate durumda kullanıcıya sor
 //   • _duplicateInfoGoster(): kamera altında inline bilgi paneli (popup değil)
@@ -317,9 +320,8 @@
     const sayac = document.getElementById('hizliSayac');
     if (!liste) return;
 
-    const kaydedilecek = kuyruk.filter(k =>
-      (k.durum === 'hazir' || k.forceEkle) && !k.yeniKaydedildi
-    ).length;
+    // v66: yeniKaydedildi yok — başarılılar zaten kuyruktan silindi
+    const kaydedilecek = kuyruk.filter(k => k.durum === 'hazir' || k.forceEkle).length;
     if (sayac) sayac.textContent = `${kuyruk.length} kayıt — ${kaydedilecek} kaydedilecek`;
 
     if (!kuyruk.length) {
@@ -334,12 +336,12 @@
     };
 
     liste.innerHTML = kuyruk.map((k, i) => {
-      // v65: forceEkle = kullanıcı onayıyla eklenen ikinci kopya
       const etiket     = k.forceEkle ? 'Kopya' : k.durum === 'hazir' ? 'Hazır' : k.durum === 'eksik' ? 'Eksik' : 'Bulunamadı';
       const badgeStyle = k.forceEkle ? 'background:#e0e7ff;color:#3730a3' : (BADGE[k.durum] || 'background:#e5e7eb;color:#374151');
 
-      const kayitPill = k.yeniKaydedildi
-        ? `<span style="background:#d1fae5;color:#065f46;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:bold;margin-left:5px">Kaydedildi</span>`
+      // Hata mesajı varsa küçük kırmızı satır göster
+      const hataPill = k.mesaj
+        ? `<div style="font-size:11px;color:#b91c1c;margin-top:2px">${_guvenli(k.mesaj)}</div>`
         : '';
 
       return `
@@ -353,9 +355,10 @@
           </span>
           <div style="flex:1;min-width:0">
             <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">
-              ${_guvenli(k.kitapAdi || '—')}${kayitPill}
+              ${_guvenli(k.kitapAdi || '—')}
             </div>
             <div style="font-size:11px;color:#9ca3af;margin-top:1px;font-family:monospace,monospace">${_guvenli(k.isbn)}</div>
+            ${hataPill}
           </div>
           <button onclick="hizliEkleSil(${i})" style="
             border:none;background:transparent;color:#9ca3af;
@@ -379,16 +382,14 @@
     const kuyrukta   = !!kuyrukItem;
 
     let kayit = {
-      isbn:           temiz,
-      kitapAdi:       '',
-      yazar:          '',
-      yayinevi:       '',
-      yayinYili:      '',
-      durum:          'bulunamadi',
-      mesaj:          '',
-      yeniKaydedildi: false,
-      forceAdding:    false,
-      forceEkle:      false
+      isbn:        temiz,
+      kitapAdi:    '',
+      yazar:       '',
+      yayinevi:    '',
+      yayinYili:   '',
+      durum:       'bulunamadi',
+      mesaj:       '',
+      forceEkle:   false
     };
 
     let dbde = false;
@@ -527,9 +528,8 @@
 
   // ── Toplu Kaydet ──────────────────────────────────────────────────────────
   async function hizliTopluKaydet() {
-    const adaylar = kuyruk.filter(k =>
-      (k.durum === 'hazir' || k.forceEkle) && !k.yeniKaydedildi
-    );
+    // v66: sadece hazır ve forceEkle olanları gönder
+    const adaylar = kuyruk.filter(k => k.durum === 'hazir' || k.forceEkle);
     if (!adaylar.length) {
       bannerGoster('bulunamadi', 'Kaydedilecek uygun kayıt yok');
       return;
@@ -539,6 +539,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor...'; }
 
     let basarili = 0, duplicate = 0, hatali = 0;
+    const basariliIsbnler = new Set(); // başarılı olanların ISBN'leri
 
     for (const k of adaylar) {
       try {
@@ -552,7 +553,6 @@
           yayinYili: k.yayinYili,
           notText:   ''
         };
-        // forceEkle:true → kullanıcı onayıyla eklenen kopya → worker ISBN kontrolünü atla
         if (k.forceEkle) payload.forceAdd = true;
 
         const sonuc = await fetch(API_URL, {
@@ -564,26 +564,37 @@
         if (!sonuc.ok) {
           k.mesaj = sonuc.error || 'Kayıt hatası'; hatali++;
         } else if (_zatenVarMi(sonuc)) {
-          // Beklenmedik duplicate (forceAdd olmayan bir item için race condition)
+          // Beklenmedik duplicate (race condition)
           k.mesaj = sonuc.message || 'Sistemde zaten mevcut'; duplicate++;
         } else {
-          k.yeniKaydedildi = true; k.mesaj = ''; basarili++;
+          // v66: başarılı → kuyruktan çıkarılacak şekilde işaretle
+          k._basarili = true; k.mesaj = ''; basarili++;
+          basariliIsbnler.add(k.isbn + '__' + (k.forceEkle ? '1' : '0'));
         }
       } catch (err) {
         k.mesaj = 'Bağlantı hatası'; hatali++;
       }
     }
 
+    // v66: başarılı kayıtları kuyruktan tamamen çıkar
+    if (basarili > 0) {
+      kuyruk = kuyruk.filter(k => !k._basarili);
+    }
+
     kuyrukRender();
     if (btn) { btn.disabled = false; btn.textContent = '💾 Toplu Kaydet'; }
 
+    // Özet mesaj
     const parcalar = [];
     if (basarili)  parcalar.push(`${basarili} eklendi`);
     if (duplicate) parcalar.push(`${duplicate} tekrar`);
     if (hatali)    parcalar.push(`${hatali} hata`);
-    const tip = hatali > 0 ? 'eksik' : basarili > 0 ? 'hazir' : 'kayitli';
-    bannerGoster(tip, parcalar.join(', '));
-    if (basarili > 0)  _haptic('success');
+    if (kuyruk.length && (hatali || duplicate)) {
+      parcalar.push(`${kuyruk.filter(k => k.durum === 'hazir' || k.forceEkle).length} kayıt kaldı`);
+    }
+    const tip = hatali > 0 ? 'eksik' : duplicate > 0 ? 'kayitli' : 'hazir';
+    bannerGoster(tip, parcalar.join(' · '));
+    if (basarili > 0)    _haptic('success');
     else if (hatali > 0) _haptic('error');
   }
 
