@@ -822,3 +822,4 @@ async function lookupGoogleBooks(isbn) {
 
   return { bulundu: false, mesaj: 'Kitap bilgisi bulunamadi' };
 }
+// redeploy trigger
