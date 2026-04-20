@@ -5,66 +5,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <title>Kütüphane Kitap Listesi</title>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      margin: 0;
       font-family: Arial, sans-serif;
       background: #f5f5f5;
       color: #222;
-      padding: 14px;
     }
 
+    /* ── Sabit Üst Bar ───────────────────────────────────────────── */
+    #topBar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 500;
+      height: 56px;
+      background: #111;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .topBarBtn {
+      border: none;
+      border-radius: 10px;
+      background: #333;
+      color: #fff;
+      font-size: 18px;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .topBarBtn:active { background: #555; }
+
+    .durumBtn {
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 0 14px;
+      height: 40px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Arama Alanı ─────────────────────────────────────────────── */
+    #aramaAlani {
+      position: fixed;
+      top: 56px; left: 0; right: 0;
+      z-index: 499;
+      height: 56px;
+      background: #f5f5f5;
+      padding: 8px 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    #aramaAlani input {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px;
+      font-size: 15px;
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      outline: none;
+      display: block;
+    }
+
+    /* ── İçerik Alanı ────────────────────────────────────────────── */
     .app {
       max-width: 900px;
       margin: 0 auto;
-    }
-
-    .header {
-      background: #111;
-      color: #fff;
-      padding: 18px;
-      border-radius: 18px;
-      font-size: 28px;
-      font-weight: bold;
-      text-align: center;
-      margin-bottom: 14px;
-    }
-
-    .homeBtn {
-      display: block;
-      width: 100%;
-      text-decoration: none;
-      margin-bottom: 14px;
-    }
-
-    .homeBtn button {
-      width: 100%;
-      border: none;
-      border-radius: 18px;
-      padding: 18px;
-      font-size: 22px;
-      font-weight: bold;
-      background: #F28400;
-      color: #fff;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.10);
-    }
-
-    .toolbar {
-      background: #fff;
-      border-radius: 18px;
-      padding: 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      margin-bottom: 14px;
-    }
-
-    input {
-      width: 100%;
-      padding: 16px;
-      font-size: 18px;
-      border-radius: 12px;
-      border: 1px solid #ccc;
+      padding: 124px 40px 24px 14px; /* top=112+12, right=28px A-Z + 12 */
     }
 
     .list {
@@ -72,6 +92,7 @@
       gap: 12px;
     }
 
+    /* ── Kart ────────────────────────────────────────────────────── */
     .card {
       background: #fff;
       border-radius: 18px;
@@ -83,7 +104,6 @@
       display: flex;
       gap: 14px;
       align-items: flex-start;
-      /* v63: cursor pointer via inline style (set in liste.js) */
     }
 
     .coverWrap {
@@ -114,10 +134,7 @@
       font-size: 26px;
     }
 
-    .cardBody {
-      flex: 1;
-      min-width: 0;
-    }
+    .cardBody { flex: 1; min-width: 0; }
 
     .title {
       font-size: 22px;
@@ -154,20 +171,9 @@
       font-weight: bold;
     }
 
-    .rafta {
-      background: #d1fae5;
-      color: #065f46;
-    }
-
-    .oduncte {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    .kayip {
-      background: #ffedd5;
-      color: #9a3412;
-    }
+    .rafta   { background: #d1fae5; color: #065f46; }
+    .oduncte { background: #fee2e2; color: #991b1b; }
+    .kayip   { background: #ffedd5; color: #9a3412; }
 
     .actions {
       display: grid;
@@ -187,13 +193,9 @@
       width: 100%;
     }
 
-    .btnLoan   { background: #0b57d0; }
-    .btnReturn { background: #047857; }
-
-    .btnDisabled {
-      background: #9ca3af;
-      cursor: not-allowed;
-    }
+    .btnLoan     { background: #0b57d0; }
+    .btnReturn   { background: #047857; }
+    .btnDisabled { background: #9ca3af; cursor: not-allowed; }
 
     .empty {
       text-align: center;
@@ -215,27 +217,11 @@
       line-height: 1.4;
       word-break: break-word;
     }
+    .message.success { display: block; background: #d1fae5; color: #065f46; }
+    .message.error   { display: block; background: #fee2e2; color: #991b1b; }
+    .message.warn    { display: block; background: #ffedd5; color: #9a3412; }
 
-    .message.success {
-      display: block;
-      background: #d1fae5;
-      color: #065f46;
-    }
-
-    .message.error {
-      display: block;
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    .message.warn {
-      display: block;
-      background: #ffedd5;
-      color: #9a3412;
-    }
-
-    /* v63: detay overlay — overlay kendisi JS'te oluşturulur,
-       sadece overlay içindeki paylaşılan sınıf stilleri burada */
+    /* detay overlay içindeki status sınıfı */
     #detayOverlay .status {
       display: inline-block;
       padding: 5px 10px;
@@ -244,50 +230,96 @@
       font-weight: bold;
     }
 
+    /* ── A–Z Sağ Bar ─────────────────────────────────────────────── */
+    #azBar {
+      position: fixed;
+      right: 0;
+      top: 112px;
+      bottom: 0;
+      width: 28px;
+      z-index: 400;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      align-items: center;
+      padding: 6px 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    .azLetter {
+      font-size: 9px;
+      font-weight: 800;
+      color: #0b57d0;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .azLetter:active { background: #dbeafe; }
+
+    /* ── Harf Overlay ────────────────────────────────────────────── */
+    #azOverlay {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 72px;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.65);
+      width: 110px;
+      height: 110px;
+      border-radius: 22px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
     @media (max-width: 640px) {
-      .actions {
-        grid-template-columns: 1fr;
-      }
-
-      .coverWrap {
-        width: 64px;
-        min-width: 64px;
-        max-width: 64px;
-      }
-
-      .coverImg,
-      .coverPlaceholder {
-        width: 64px;
-        height: 92px;
-      }
+      .actions { grid-template-columns: 1fr; }
+      .coverWrap { width: 64px; min-width: 64px; max-width: 64px; }
+      .coverImg, .coverPlaceholder { width: 64px; height: 92px; }
     }
   </style>
 </head>
 <body>
+
+  <!-- Sabit Üst Bar -->
+  <div id="topBar">
+    <a href="./" class="topBarBtn" title="Ana Ekrana Dön">🏠</a>
+    <button class="topBarBtn" id="scrollTopBtn" title="Yukarı Çık">⬆️</button>
+    <div style="flex:1"></div>
+    <button class="durumBtn" id="filtrRafta">Rafta</button>
+    <button class="durumBtn" id="filtrOdunc">Ödünç</button>
+  </div>
+
+  <!-- Arama Alanı -->
+  <div id="aramaAlani">
+    <input
+      type="text"
+      id="search"
+      placeholder="Kitap adı, yazar, yayınevi ara..."
+      autocomplete="off"
+    />
+  </div>
+
   <div class="app">
-    <div class="header">📚 Kitap Listesi</div>
-
-    <a class="homeBtn" href="./?v=63">
-      <button>🏠 Ana Ekrana Dön</button>
-    </a>
-
     <div id="message" class="message"></div>
-
-    <div class="toolbar">
-      <input
-        type="text"
-        id="search"
-        placeholder="Kitap kodu, kitap adı, yazar veya ISBN ara..."
-        oninput="renderList()"
-      />
-    </div>
-
     <div id="list" class="list"></div>
   </div>
+
+  <!-- A-Z Sidebar (harfler JS tarafından eklenir) -->
+  <div id="azBar"></div>
+  <div id="azOverlay"></div>
 
   <script src="./js/api.js?v=63"></script>
   <script src="./js/camera.js?v=63"></script>
   <script src="./js/utils.js?v=63"></script>
-  <script src="./js/liste.js?v=72"></script>
+  <script src="./js/liste.js?v=73"></script>
 </body>
 </html>
