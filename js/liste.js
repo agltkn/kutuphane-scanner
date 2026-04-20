@@ -1,4 +1,4 @@
-// js/liste.js — v65
+// js/liste.js — v66
 // v64:
 //   • _isbnSayimHesapla(): books üzerinden ISBN bazlı kopya sayısı
 //   • renderList: adet > 1 ise kart üzerinde "📚 X adet" badge
@@ -130,17 +130,15 @@ function renderList() {
       ? `<button class="btn btnReturn" onclick="event.stopPropagation();returnBook(${Number(book.id)})">İade Al</button>`
       : `<button class="btn btnReturn btnDisabled" disabled>İade Beklemiyor</button>`;
 
-    // v65: adet badge — temizIsbn() normalize anahtarıyla say
-    const isbn      = typeof temizIsbn === 'function' ? temizIsbn(book.isbn || '') : (book.isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
+    // v66: adet badge — her zaman göster (1 adet dahil)
+    const isbn       = typeof temizIsbn === 'function' ? temizIsbn(book.isbn || '') : (book.isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
     const adetSayisi = isbn ? (isbnSayim[isbn] || 1) : 1;
-    const adetBadge  = adetSayisi > 1
-      ? `<span style="
-          display:inline-block;margin-bottom:5px;
-          background:#dbeafe;color:#1d4ed8;
-          padding:2px 8px;border-radius:999px;
-          font-size:11px;font-weight:700;
-        ">📚 ${adetSayisi} adet</span>`
-      : '';
+    const adetBadge  = `<span style="
+        display:inline-block;margin-bottom:5px;
+        background:#dbeafe;color:#1d4ed8;
+        padding:2px 8px;border-radius:999px;
+        font-size:11px;font-weight:700;
+      ">📚 ${adetSayisi} adet</span>`;
 
     return `
       <div class="card">
@@ -193,18 +191,16 @@ function detayAc(id) {
   const loanBtn   = durum === 'RAFTA'    ? `<button onclick="loanBook(${Number(book.id)});detayKapat()" style="${_detayBtnStyle('#0b57d0')}">📤 Ödünç Ver</button>` : '';
   const returnBtn = durum === 'ÖDÜNÇTE'  ? `<button onclick="returnBook(${Number(book.id)});detayKapat()" style="${_detayBtnStyle('#047857')}">📥 İade Al</button>` : '';
 
-  // v65: adet sayısı — temizIsbn() normalize anahtarıyla
+  // v66: adet sayısı — her zaman göster (1 adet dahil)
   const isbn       = typeof temizIsbn === 'function' ? temizIsbn(book.isbn || '') : (book.isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
   const isbnSayim  = _isbnSayimHesapla(books);
   const adetSayisi = isbn ? (isbnSayim[isbn] || 1) : 1;
-  const adetSatiri = adetSayisi > 1
-    ? `<div style="
-        display:inline-flex;align-items:center;gap:5px;
-        background:#dbeafe;color:#1d4ed8;
-        padding:4px 10px;border-radius:999px;
-        font-size:12px;font-weight:700;margin-bottom:8px;
-      ">📚 Toplam ${adetSayisi} adet</div>`
-    : '';
+  const adetSatiri = `<div style="
+      display:inline-flex;align-items:center;gap:5px;
+      background:#dbeafe;color:#1d4ed8;
+      padding:4px 10px;border-radius:999px;
+      font-size:12px;font-weight:700;margin-bottom:8px;
+    ">📚 Toplam ${adetSayisi} adet</div>`;
 
   // Remove any existing overlay
   const old = document.getElementById('detayOverlay');
@@ -238,13 +234,13 @@ function detayAc(id) {
         <div style="display:flex;align-items:center;padding-left:4px">
           <div style="width:40px;height:4px;border-radius:2px;background:#d1d5db"></div>
         </div>
-        <!-- kapat butonu — büyük, net, mobil uyumlu -->
+        <!-- kapat butonu — koyu arka plan, yüksek kontrast, mobil uyumlu -->
         <button onclick="detayKapat()" style="
           display:flex;align-items:center;gap:6px;
-          padding:9px 18px;font-size:14px;font-weight:700;
+          padding:10px 20px;font-size:15px;font-weight:700;
           border:none;border-radius:20px;
-          background:#f3f4f6;color:#374151;cursor:pointer;
-          min-height:44px;min-width:90px;
+          background:#1f2937;color:#fff;cursor:pointer;
+          min-height:44px;min-width:100px;
         ">✕ Kapat</button>
       </div>
 
