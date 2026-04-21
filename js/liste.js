@@ -1,14 +1,13 @@
-// js/liste.js — v68
-// v68: 5 geliştirme
-//   1. Adet sayımı: ISBN'siz kitaplar için "ISBN yok" badge'i, sayım kodu korundu
-//   2. Detay ekranına ISBN satırı eklendi
-//   3. Ödünç ver: prompt() → modal (kişi adı + gün sayısı), iade tarihi hesaplama
-//   4. Ayarlar entegrasyonu: settingsGet'ten oduncGunSayisi default
-//   5. A-Z bar: görsel kompakt (daha küçük font/renk), dokunma alanı korundu
+// js/liste.js — v69
+// v69: 4 düzeltme
+//   1. ADET: _normIsbn() — temizIsbn/KutuphaneCamera bağımlılığı kaldırıldı,
+//            tüm sayım tek tutarlı fonksiyonla; console.log ile debug
+//   2. KAPAT: detay panelde sticky footer büyük Kapat butonu (mobil thumb-friendly)
+//   3. AUTOCOMPLETE: yazar + yayınevi inputları için akıllı dropdown (detayAc)
+//   4. AUTOCOMPLETE: ödünç alan inputu için geçmiş kişi önerileri (_oduncModalGoster)
+// v68: loanBook modal, ISBN detayda, A-Z kompakt, ayarlar entegrasyonu
 // v67: Tam UX yenileme — liste ekranı
-// v66: Adet badge her zaman gösterilir
-// v65: ISBN normalize (temizIsbn), flex-column panel
-// v64: _isbnSayimHesapla, adet badge, sticky Kapat header
+// v65: ISBN normalize, flex-column panel
 // v63: kapakHtml localStorage, detayAc overlay, bookUpdate
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -16,6 +15,13 @@ let books = [];
 let durumFiltre = { 'RAFTA': true, 'ÖDÜNÇTE': true };
 
 const TR_ALFABE = 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ';
+
+// ── ISBN Normalize — YEREL, temizIsbn'den bağımsız ───────────────────────
+// Root cause fix: temizIsbn → KutuphaneCamera.temizKod zincirini bypass eder.
+// _isbnSayimHesapla, renderList ve detayAc hep bu fonksiyonu kullanır → tutarlı key.
+function _normIsbn(raw) {
+  return String(raw || '').toUpperCase().replace(/[^0-9X]/g, '').trim();
+}
 
 // ── Yardımcılar ───────────────────────────────────────────────────────────
 function safeAttr(text) {
@@ -42,7 +48,7 @@ function listeMesajTemizle() {
 }
 
 function kapakUrlOlustur(isbn) {
-  const temiz = temizIsbn(isbn);
+  const temiz = _normIsbn(isbn);
   if (!temiz) return '';
   return 'https://covers.openlibrary.org/b/isbn/' + encodeURIComponent(temiz) + '-M.jpg';
 }
@@ -66,18 +72,86 @@ function kapakHtml(book) {
   `;
 }
 
-// ISBN normalize ederek sayım — temizIsbn() ile farklı formatlar eşleşir
-// Not: ISBN'siz kitaplar sayıma dahil edilmez (her biri kendi kaydı)
+// ISBN sayım — _normIsbn ile tutarlı, temizIsbn'e bağımlılık YOK
 function _isbnSayimHesapla(kitaplar) {
   const sayim = {};
   for (const b of kitaplar) {
-    const isbn = typeof temizIsbn === 'function'
-      ? temizIsbn(b.isbn || '')
-      : (b.isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
-    if (!isbn) continue; // ISBN'siz kitaplar sayılmaz
+    const isbn = _normIsbn(b.isbn);
+    if (!isbn) continue;
     sayim[isbn] = (sayim[isbn] || 0) + 1;
   }
   return sayim;
+}
+
+// ── Autocomplete ──────────────────────────────────────────────────────────
+// position:fixed kullanır → overflow-y:auto klipleme sorununu aşar
+function _autocompleteSetup(inputEl, suggestions) {
+  if (!inputEl || !suggestions || !suggestions.length) return;
+
+  // Eski dropdown varsa temizle
+  document.querySelectorAll('._acDrop[data-forinput="' + inputEl.id + '"]').forEach(d => d.remove());
+
+  const drop = document.createElement('div');
+  drop.className = '_acDrop';
+  drop.dataset.forinput = inputEl.id;
+  drop.style.cssText = [
+    'display:none;position:fixed;',
+    'background:#fff;',
+    'border:1.5px solid #d1d5db;border-radius:12px;',
+    'box-shadow:0 6px 20px rgba(0,0,0,0.14);',
+    'z-index:9900;',
+    'max-height:180px;overflow-y:auto;'
+  ].join('');
+  document.body.appendChild(drop);
+
+  function _reposition() {
+    const r = inputEl.getBoundingClientRect();
+    drop.style.top   = (r.bottom + 3) + 'px';
+    drop.style.left  = r.left + 'px';
+    drop.style.width = r.width + 'px';
+  }
+
+  function _showDrop(items) {
+    if (!items.length) { drop.style.display = 'none'; return; }
+    drop.innerHTML = items.slice(0, 8).map(item =>
+      `<div style="padding:10px 14px;font-size:14px;cursor:pointer;
+                   border-bottom:1px solid #f3f4f6;color:#111;
+                   -webkit-tap-highlight-color:transparent;"
+           data-val="${safeAttr(item)}">${guvenliYazi(item)}</div>`
+    ).join('');
+    drop.style.display = 'block';
+    _reposition();
+
+    drop.querySelectorAll('[data-val]').forEach(el => {
+      function _pick() {
+        inputEl.value = el.dataset.val;
+        drop.style.display = 'none';
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      el.addEventListener('mousedown',  (e) => { e.preventDefault(); _pick(); });
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); _pick(); }, { passive: false });
+    });
+  }
+
+  inputEl.addEventListener('input', () => {
+    const q = inputEl.value.trim().toLocaleLowerCase('tr');
+    if (!q) { drop.style.display = 'none'; return; }
+    _showDrop(suggestions.filter(s => s.toLocaleLowerCase('tr').includes(q)));
+  });
+
+  inputEl.addEventListener('focus', () => {
+    const q = inputEl.value.trim().toLocaleLowerCase('tr');
+    if (q) _showDrop(suggestions.filter(s => s.toLocaleLowerCase('tr').includes(q)));
+  });
+
+  inputEl.addEventListener('blur', () => {
+    setTimeout(() => { drop.style.display = 'none'; }, 220);
+  });
+}
+
+// Tüm _acDrop'ları temizle (overlay kapanınca çağrılır)
+function _autocompleteTemizle() {
+  document.querySelectorAll('._acDrop').forEach(d => d.remove());
 }
 
 // ── Üst Bar: Durum Filtresi ───────────────────────────────────────────────
@@ -111,12 +185,10 @@ function _azBarKur() {
     `<span class="azLetter" data-harf="${h}">${h}</span>`
   ).join('');
 
-  // Touch sürükleme
   bar.addEventListener('touchstart', _azTouch, { passive: false });
   bar.addEventListener('touchmove',  _azTouch, { passive: false });
   bar.addEventListener('touchend',   _azTouchEnd, { passive: false });
 
-  // Desktop tıklama
   bar.querySelectorAll('.azLetter').forEach(el => {
     el.addEventListener('click', () => {
       _jumpToLetter(el.dataset.harf);
@@ -130,13 +202,13 @@ let _azOverlayTimer = null;
 function _azTouch(e) {
   e.preventDefault();
   const touch = e.touches[0];
-  const bar = document.getElementById('azBar');
+  const bar   = document.getElementById('azBar');
   if (!bar) return;
-  const rect    = bar.getBoundingClientRect();
-  const y       = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
+  const rect     = bar.getBoundingClientRect();
+  const y        = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
   const fraction = y / rect.height;
-  const idx     = Math.min(TR_ALFABE.length - 1, Math.floor(fraction * TR_ALFABE.length));
-  const harf    = TR_ALFABE[idx];
+  const idx      = Math.min(TR_ALFABE.length - 1, Math.floor(fraction * TR_ALFABE.length));
+  const harf     = TR_ALFABE[idx];
   _jumpToLetter(harf);
   _harfOverlayGoster(harf);
 }
@@ -165,7 +237,7 @@ function _jumpToLetter(harf) {
 function _harfOverlayGoster(harf) {
   const overlay = document.getElementById('azOverlay');
   if (!overlay) return;
-  overlay.textContent  = harf;
+  overlay.textContent   = harf;
   overlay.style.display = 'flex';
   clearTimeout(_azOverlayTimer);
   _azOverlayTimer = setTimeout(() => {
@@ -178,6 +250,9 @@ async function loadBooks() {
   listeMesajTemizle();
   try {
     books = await tumKitaplariGetir();
+    // DEBUG: Konsola yazdır — tarayıcı konsolunda kontrol et
+    const dbg = _isbnSayimHesapla(books);
+    console.log('[liste] books:', books.length, '| isbnSayim:', JSON.stringify(dbg));
     renderList();
   } catch (err) {
     listeMesaj('Liste hatası: ' + err.message, 'error');
@@ -190,7 +265,6 @@ function renderList() {
   const list = document.getElementById('list');
   if (!list) return;
 
-  // 1. Arama filtresi — kitap adı + yazar + yayınevi
   let filtered = books.filter(book => {
     if (!q) return true;
     return (
@@ -200,14 +274,12 @@ function renderList() {
     );
   });
 
-  // 2. Durum filtresi
   filtered = filtered.filter(book => {
     const d = String(book.durum || 'RAFTA').toUpperCase();
     if (d === 'ÖDÜNÇTE') return durumFiltre['ÖDÜNÇTE'];
     return durumFiltre['RAFTA'];
   });
 
-  // 3. Alfabetik sıralama (TR locale)
   filtered = [...filtered].sort((a, b) =>
     (a.kitapAdi || '').toLocaleLowerCase('tr').localeCompare(
       (b.kitapAdi || '').toLocaleLowerCase('tr'), 'tr'
@@ -219,7 +291,7 @@ function renderList() {
     return;
   }
 
-  // 4. ISBN sayımı — tüm books (filtresiz), gerçek stok sayısı
+  // ISBN sayımı — _normIsbn ile, tüm books üzerinden (filtresiz)
   const isbnSayim = _isbnSayimHesapla(books);
 
   list.innerHTML = filtered.map(book => {
@@ -241,18 +313,17 @@ function renderList() {
       ? `<button class="btn btnReturn" onclick="event.stopPropagation();returnBook(${Number(book.id)})">İade Al</button>`
       : `<button class="btn btnReturn btnDisabled" disabled>İade Beklemiyor</button>`;
 
-    // Adet badge: ISBN varsa kopya sayısı, yoksa "ISBN yok" göster
-    const isbn = typeof temizIsbn === 'function'
-      ? temizIsbn(book.isbn || '')
-      : (book.isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
+    // _normIsbn — temizIsbn kullanmıyor, doğrudan local fonksiyon
+    const isbnKey    = _normIsbn(book.isbn);
+    const adetSayisi = isbnKey ? (isbnSayim[isbnKey] || 1) : 0;
 
-    const adetBadge = isbn
+    const adetBadge = isbnKey
       ? `<span style="
             display:inline-block;margin-bottom:5px;
             background:#dbeafe;color:#1d4ed8;
             padding:2px 8px;border-radius:999px;
             font-size:11px;font-weight:700;
-          ">📚 ${isbnSayim[isbn] || 1} adet</span>`
+          ">📚 ${adetSayisi} adet</span>`
       : `<span style="
             display:inline-block;margin-bottom:5px;
             background:#f3f4f6;color:#9ca3af;
@@ -260,7 +331,6 @@ function renderList() {
             font-size:11px;font-weight:600;
           ">📌 ISBN yok</span>`;
 
-    // data-kitap-adi: A-Z jump için
     return `
       <div class="card" data-kitap-adi="${safeAttr(book.kitapAdi || '')}">
         <div class="cardTop" onclick="detayAc(${Number(book.id)})" style="cursor:pointer">
@@ -295,18 +365,17 @@ function detayAc(id) {
   const book = books.find(b => Number(b.id) === Number(id));
   if (!book) return;
 
-  const durum = String(book.durum || 'RAFTA').toUpperCase();
+  const durum      = String(book.durum || 'RAFTA').toUpperCase();
   const localKapak = localStorage.getItem('kapak_' + book.id);
 
   const kapakSrc = localKapak
     ? safeAttr(localKapak)
     : book.isbn
-      ? safeAttr('https://covers.openlibrary.org/b/isbn/' + encodeURIComponent(temizIsbn(book.isbn)) + '-M.jpg')
+      ? safeAttr('https://covers.openlibrary.org/b/isbn/' + encodeURIComponent(_normIsbn(book.isbn)) + '-M.jpg')
       : '';
 
   const statusClass = durum === 'ÖDÜNÇTE' ? 'oduncte' : durum === 'KAYIP' ? 'kayip' : 'rafta';
 
-  // Detay panelinden Ödünç Ver: önce detayı kapat, sonra modal göster
   const loanBtn   = durum === 'RAFTA'
     ? `<button onclick="detayKapat();loanBook(${Number(book.id)})" style="${_detayBtnStyle('#0b57d0')}">📤 Ödünç Ver</button>`
     : '';
@@ -314,17 +383,18 @@ function detayAc(id) {
     ? `<button onclick="returnBook(${Number(book.id)});detayKapat()" style="${_detayBtnStyle('#047857')}">📥 İade Al</button>`
     : '';
 
-  // Adet satırı — tüm kitap listesinden ISBN sayımı
-  const isbn       = typeof temizIsbn === 'function' ? temizIsbn(book.isbn || '') : (book.isbn || '').replace(/[^0-9X]/gi, '').toUpperCase();
+  // Adet — _normIsbn ile, tutarlı
+  const isbnKey    = _normIsbn(book.isbn);
   const isbnSayim  = _isbnSayimHesapla(books);
+  const adetSayisi = isbnKey ? (isbnSayim[isbnKey] || 1) : 0;
 
-  const adetSatiri = isbn
+  const adetSatiri = isbnKey
     ? `<div style="
           display:inline-flex;align-items:center;gap:5px;
           background:#dbeafe;color:#1d4ed8;
           padding:4px 10px;border-radius:999px;
           font-size:12px;font-weight:700;margin-bottom:8px;
-        ">📚 Toplam ${isbnSayim[isbn] || 1} adet</div>`
+        ">📚 Toplam ${adetSayisi} adet</div>`
     : `<div style="
           display:inline-flex;align-items:center;gap:5px;
           background:#f3f4f6;color:#9ca3af;
@@ -332,10 +402,13 @@ function detayAc(id) {
           font-size:12px;font-weight:600;margin-bottom:8px;
         ">📌 ISBN yok</div>`;
 
-  // ISBN satırı (Geliştirme #2: detayda ISBN göster)
   const isbnSatiri = book.isbn
     ? `<div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-family:monospace;">ISBN: ${guvenliYazi(book.isbn)}</div>`
     : '';
+
+  // Autocomplete için veri (duplicate filter)
+  const yazarOneriler    = [...new Set(books.map(b => b.yazar   ).filter(Boolean))].sort((a,b) => a.localeCompare(b,'tr'));
+  const yayiOneriler     = [...new Set(books.map(b => b.yayinevi).filter(Boolean))].sort((a,b) => a.localeCompare(b,'tr'));
 
   const old = document.getElementById('detayOverlay');
   if (old) old.remove();
@@ -354,7 +427,8 @@ function detayAc(id) {
       display:flex;flex-direction:column;
       box-shadow:0 -8px 32px rgba(0,0,0,0.18);
     ">
-      <!-- Sabit header -->
+
+      <!-- ── Header (sticky, scroll edilemez) ── -->
       <div style="
         flex-shrink:0;
         background:#fff;border-radius:22px 22px 0 0;
@@ -362,27 +436,29 @@ function detayAc(id) {
         padding:12px 16px 10px;
         border-bottom:1px solid #f3f4f6;
       ">
-        <div style="display:flex;align-items:center;padding-left:4px">
-          <div style="width:40px;height:4px;border-radius:2px;background:#d1d5db"></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:36px;height:4px;border-radius:2px;background:#d1d5db"></div>
+          <span style="font-size:15px;font-weight:700;color:#111">Kitap Detayı</span>
         </div>
         <button onclick="detayKapat()" style="
-          display:flex;align-items:center;gap:6px;
-          padding:10px 20px;font-size:15px;font-weight:700;
-          border:none;border-radius:20px;
-          background:#1f2937;color:#fff;cursor:pointer;
-          min-height:44px;min-width:100px;
+          width:36px;height:36px;border:none;border-radius:50%;
+          background:#f3f4f6;color:#374151;font-size:18px;
+          cursor:pointer;display:flex;align-items:center;justify-content:center;
           -webkit-tap-highlight-color:transparent;
-        ">✕ Kapat</button>
+        ">✕</button>
       </div>
 
-      <!-- Sadece bu div scroll olur -->
-      <div style="flex:1;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,0) 0;">
+      <!-- ── Scrollable içerik ── -->
+      <div style="flex:1;overflow-y:auto;padding:0 0 4px 0;">
 
         <!-- Kapak + üst bilgi -->
         <div style="display:flex;gap:16px;align-items:flex-start;padding:16px 18px">
-          <div style="flex-shrink:0;position:relative;cursor:pointer" onclick="document.getElementById('detayKapakInput').click()" title="Kapak fotoğrafı ekle">
+          <div style="flex-shrink:0;position:relative;cursor:pointer"
+               onclick="document.getElementById('detayKapakInput').click()"
+               title="Kapak fotoğrafı ekle">
             ${kapakSrc
-              ? `<img id="detayKapakImg" src="${kapakSrc}" alt="Kapak" style="width:80px;height:116px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;display:block;"
+              ? `<img id="detayKapakImg" src="${kapakSrc}" alt="Kapak"
+                  style="width:80px;height:116px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;display:block;"
                   referrerpolicy="no-referrer"
                   onerror="this.outerHTML='<div id=&quot;detayKapakImg&quot; style=&quot;width:80px;height:116px;border-radius:12px;border:1px solid #e5e7eb;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:28px;&quot;>📘</div>'">`
               : `<div id="detayKapakImg" style="width:80px;height:116px;border-radius:12px;border:1px solid #e5e7eb;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:28px;">📘</div>`}
@@ -402,23 +478,29 @@ function detayAc(id) {
         </div>
 
         <!-- Eylem butonları -->
-        ${(loanBtn || returnBtn) ? `<div style="display:grid;grid-template-columns:${loanBtn && returnBtn ? '1fr 1fr' : '1fr'};gap:8px;padding:0 18px 14px">${loanBtn}${returnBtn}</div>` : ''}
+        ${(loanBtn || returnBtn)
+          ? `<div style="display:grid;grid-template-columns:${loanBtn && returnBtn ? '1fr 1fr' : '1fr'};gap:8px;padding:0 18px 14px">${loanBtn}${returnBtn}</div>`
+          : ''}
 
         <!-- Düzenleme formu -->
         <div style="padding:0 18px 18px">
           <div style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">Bilgileri Düzenle</div>
 
           <label style="${_detayLabelStyle()}">Kitap Adı</label>
-          <input id="detayEditAdi" type="text" value="${safeAttr(book.kitapAdi || '')}" style="${_detayInputStyle()}">
+          <input id="detayEditAdi" type="text" value="${safeAttr(book.kitapAdi || '')}" style="${_detayInputStyle()}" autocomplete="off">
 
           <label style="${_detayLabelStyle()}">Yazar</label>
-          <input id="detayEditYazar" type="text" value="${safeAttr(book.yazar || '')}" style="${_detayInputStyle()}">
+          <div style="position:relative">
+            <input id="detayEditYazar" type="text" value="${safeAttr(book.yazar || '')}" style="${_detayInputStyle()}" autocomplete="off">
+          </div>
 
           <label style="${_detayLabelStyle()}">Yayınevi</label>
-          <input id="detayEditYayinevi" type="text" value="${safeAttr(book.yayinevi || '')}" style="${_detayInputStyle()}">
+          <div style="position:relative">
+            <input id="detayEditYayinevi" type="text" value="${safeAttr(book.yayinevi || '')}" style="${_detayInputStyle()}" autocomplete="off">
+          </div>
 
           <label style="${_detayLabelStyle()}">Yayın Yılı</label>
-          <input id="detayEditYil" type="text" value="${safeAttr(book.yayinYili || '')}" style="${_detayInputStyle()}">
+          <input id="detayEditYil" type="text" value="${safeAttr(book.yayinYili || '')}" style="${_detayInputStyle()}" autocomplete="off">
 
           <label style="${_detayLabelStyle()}">Not</label>
           <textarea id="detayEditNot" style="${_detayInputStyle()}min-height:80px;resize:vertical;">${guvenliYazi(book.not || '')}</textarea>
@@ -429,20 +511,44 @@ function detayAc(id) {
         </div>
 
       </div><!-- /scrollable -->
+
+      <!-- ── Footer: Kapat butonu — sticky, her zaman görünür ── -->
+      <div style="
+        flex-shrink:0;
+        padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+        border-top:1px solid #f3f4f6;
+        background:#fff;
+      ">
+        <button onclick="detayKapat()" style="
+          display:block;width:100%;padding:15px;
+          font-size:17px;font-weight:700;
+          border:none;border-radius:14px;
+          background:#1f2937;color:#fff;cursor:pointer;
+          -webkit-tap-highlight-color:transparent;
+          letter-spacing:0.3px;
+        ">✕ Kapat</button>
+      </div>
+
     </div>
   `;
 
   document.body.appendChild(overlay);
 
+  // Açılış animasyonu
   const panel = overlay.querySelector('#detayPanel');
   if (panel) {
-    panel.style.transform = 'translateY(100%)';
+    panel.style.transform  = 'translateY(100%)';
     panel.style.transition = 'transform 0.25s ease';
     requestAnimationFrame(() => { panel.style.transform = 'translateY(0)'; });
   }
+
+  // Autocomplete kurulumu (DOM'a eklendikten sonra)
+  _autocompleteSetup(document.getElementById('detayEditYazar'),    yazarOneriler);
+  _autocompleteSetup(document.getElementById('detayEditYayinevi'), yayiOneriler);
 }
 
 function detayKapat() {
+  _autocompleteTemizle();
   const overlay = document.getElementById('detayOverlay');
   if (!overlay) return;
   const panel = overlay.querySelector('#detayPanel');
@@ -468,10 +574,10 @@ async function detayKaydet(id) {
 
   if (!adi || !yazar) {
     if (mesajEl) {
-      mesajEl.style.display = 'block';
+      mesajEl.style.display    = 'block';
       mesajEl.style.background = '#fee2e2';
-      mesajEl.style.color = '#991b1b';
-      mesajEl.textContent = 'Kitap adı ve yazar zorunlu';
+      mesajEl.style.color      = '#991b1b';
+      mesajEl.textContent      = 'Kitap adı ve yazar zorunlu';
     }
     return;
   }
@@ -490,10 +596,10 @@ async function detayKaydet(id) {
     const result = await apiPost(payload);
     if (!result.ok) {
       if (mesajEl) {
-        mesajEl.style.display = 'block';
+        mesajEl.style.display    = 'block';
         mesajEl.style.background = '#fee2e2';
-        mesajEl.style.color = '#991b1b';
-        mesajEl.textContent = result.error || 'Kayıt hatası';
+        mesajEl.style.color      = '#991b1b';
+        mesajEl.textContent      = result.error || 'Kayıt hatası';
       }
       return;
     }
@@ -510,10 +616,10 @@ async function detayKaydet(id) {
     listeMesaj(result.message || 'Kitap güncellendi', 'success');
   } catch (err) {
     if (mesajEl) {
-      mesajEl.style.display = 'block';
+      mesajEl.style.display    = 'block';
       mesajEl.style.background = '#fee2e2';
-      mesajEl.style.color = '#991b1b';
-      mesajEl.textContent = 'Kayıt hatası: ' + err.message;
+      mesajEl.style.color      = '#991b1b';
+      mesajEl.textContent      = 'Kayıt hatası: ' + err.message;
     }
   }
 }
@@ -553,16 +659,14 @@ function _detayInputStyle() {
     'border:1px solid #d1d5db;border-radius:12px;background:#fff;outline:none;display:block;';
 }
 
-// ── Ödünç Modal (Geliştirme #3 + #4) ─────────────────────────────────────
-/**
- * Ödünç verme modalını gösterir.
- * @param {number} defaultGun  — Varsayılan gün sayısı (ayarlardan gelir)
- * @returns {Promise<{borrower:string, gun:number}|null>}  — null = iptal edildi
- */
+// ── Ödünç Modal ───────────────────────────────────────────────────────────
 function _oduncModalGoster(defaultGun) {
   return new Promise((resolve) => {
     const old = document.getElementById('oduncOverlay');
     if (old) old.remove();
+
+    // Geçmiş ödünç alanlar — autocomplete için
+    const oduncAlanlar = [...new Set(books.map(b => b.oduncAlan).filter(Boolean))].sort((a,b) => a.localeCompare(b,'tr'));
 
     const overlay = document.createElement('div');
     overlay.id = 'oduncOverlay';
@@ -576,67 +680,79 @@ function _oduncModalGoster(defaultGun) {
       <div id="oduncPanel" style="
         background:#fff;border-radius:22px 22px 0 0;
         width:100%;max-width:500px;
-        padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));
+        display:flex;flex-direction:column;
         box-shadow:0 -8px 32px rgba(0,0,0,0.18);
       ">
-        <div style="text-align:center;margin-bottom:16px">
-          <div style="width:40px;height:4px;border-radius:2px;background:#d1d5db;display:inline-block"></div>
+        <!-- Header -->
+        <div style="
+          flex-shrink:0;
+          padding:14px 16px 12px;
+          border-bottom:1px solid #f3f4f6;
+          display:flex;align-items:center;gap:10px;
+        ">
+          <div style="width:36px;height:4px;border-radius:2px;background:#d1d5db"></div>
+          <span style="font-size:16px;font-weight:700;color:#111">📤 Ödünç Ver</span>
         </div>
-        <div style="font-size:18px;font-weight:bold;color:#111;margin-bottom:18px">📤 Ödünç Ver</div>
 
-        <label style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:6px">
-          Ödünç Alan
-        </label>
-        <input
-          id="oduncAlanInput"
-          type="text"
-          placeholder="Kişi adı..."
-          autocomplete="off"
-          autocapitalize="words"
-          style="
-            width:100%;box-sizing:border-box;padding:13px 14px;font-size:16px;
-            border:1.5px solid #d1d5db;border-radius:12px;background:#fff;outline:none;
-            display:block;margin-bottom:16px;
-          "
-        >
+        <!-- Form -->
+        <div style="padding:16px 20px 8px;overflow-y:auto;">
+          <label style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:6px">
+            Ödünç Alan
+          </label>
+          <input
+            id="oduncAlanInput"
+            type="text"
+            placeholder="Kişi adı..."
+            autocomplete="off"
+            autocapitalize="words"
+            style="
+              width:100%;box-sizing:border-box;padding:13px 14px;font-size:16px;
+              border:1.5px solid #d1d5db;border-radius:12px;background:#fff;outline:none;
+              display:block;margin-bottom:16px;
+            "
+          >
 
-        <label style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:6px">
-          Kaç Gün Ödünç?
-        </label>
-        <input
-          id="oduncGunInput"
-          type="number"
-          min="1"
-          max="365"
-          value="${Number(defaultGun) || 15}"
-          style="
-            width:100%;box-sizing:border-box;padding:13px 14px;font-size:16px;
-            border:1.5px solid #d1d5db;border-radius:12px;background:#fff;outline:none;
-            display:block;margin-bottom:6px;
-          "
-        >
-        <div id="oduncIadeTarihGoster" style="font-size:13px;color:#6b7280;margin-bottom:16px;min-height:20px;"></div>
+          <label style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:6px">
+            Kaç Gün Ödünç?
+          </label>
+          <input
+            id="oduncGunInput"
+            type="number"
+            min="1"
+            max="365"
+            value="${Number(defaultGun) || 15}"
+            style="
+              width:100%;box-sizing:border-box;padding:13px 14px;font-size:16px;
+              border:1.5px solid #d1d5db;border-radius:12px;background:#fff;outline:none;
+              display:block;margin-bottom:6px;
+            "
+          >
+          <div id="oduncIadeTarihGoster" style="font-size:13px;color:#6b7280;margin-bottom:12px;min-height:18px;"></div>
 
-        <div id="oduncMesaj" style="
-          display:none;padding:10px 14px;border-radius:10px;
-          font-size:14px;font-weight:bold;margin-bottom:12px;
-          background:#fee2e2;color:#991b1b;
-        "></div>
+          <div id="oduncMesaj" style="
+            display:none;padding:10px 14px;border-radius:10px;
+            font-size:14px;font-weight:bold;margin-bottom:10px;
+            background:#fee2e2;color:#991b1b;
+          "></div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <button id="oduncIptalBtn" style="
-            border:none;border-radius:12px;padding:15px;
-            font-size:15px;font-weight:bold;
-            background:#f3f4f6;color:#374151;cursor:pointer;
-            -webkit-tap-highlight-color:transparent;
-          ">İptal</button>
-          <button id="oduncOnayBtn" style="
-            border:none;border-radius:12px;padding:15px;
-            font-size:15px;font-weight:bold;
-            background:#0b57d0;color:#fff;cursor:pointer;
-            -webkit-tap-highlight-color:transparent;
-          ">Ödünç Ver</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0">
+            <button id="oduncIptalBtn" style="
+              border:none;border-radius:12px;padding:15px;
+              font-size:15px;font-weight:bold;
+              background:#f3f4f6;color:#374151;cursor:pointer;
+              -webkit-tap-highlight-color:transparent;
+            ">İptal</button>
+            <button id="oduncOnayBtn" style="
+              border:none;border-radius:12px;padding:15px;
+              font-size:15px;font-weight:bold;
+              background:#0b57d0;color:#fff;cursor:pointer;
+              -webkit-tap-highlight-color:transparent;
+            ">Ödünç Ver</button>
+          </div>
         </div>
+
+        <!-- Footer safe area -->
+        <div style="flex-shrink:0;height:calc(env(safe-area-inset-bottom,0px) + 16px)"></div>
       </div>
     `;
 
@@ -644,12 +760,15 @@ function _oduncModalGoster(defaultGun) {
 
     // Açılış animasyonu
     const panel = overlay.querySelector('#oduncPanel');
-    panel.style.transform = 'translateY(100%)';
+    panel.style.transform  = 'translateY(100%)';
     panel.style.transition = 'transform 0.25s ease';
     requestAnimationFrame(() => { panel.style.transform = 'translateY(0)'; });
 
+    // Autocomplete — geçmiş ödünç alanlar
+    _autocompleteSetup(document.getElementById('oduncAlanInput'), oduncAlanlar);
+
     // İlk odak
-    setTimeout(() => document.getElementById('oduncAlanInput')?.focus(), 300);
+    setTimeout(() => document.getElementById('oduncAlanInput')?.focus(), 320);
 
     // İade tarihi güncelle
     function _guncelleIadeTarih() {
@@ -668,34 +787,27 @@ function _oduncModalGoster(defaultGun) {
     document.getElementById('oduncGunInput')?.addEventListener('input', _guncelleIadeTarih);
 
     function _kapat(result) {
+      _autocompleteTemizle();
       panel.style.transform = 'translateY(100%)';
       setTimeout(() => overlay.remove(), 250);
       resolve(result);
     }
 
-    // İptal
     document.getElementById('oduncIptalBtn').addEventListener('click', () => _kapat(null));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) _kapat(null); });
 
-    // Onay
     function _onay() {
       const borrower = (document.getElementById('oduncAlanInput')?.value || '').trim();
       const gun      = parseInt(document.getElementById('oduncGunInput')?.value, 10);
       const mesajEl  = document.getElementById('oduncMesaj');
 
       if (!borrower) {
-        if (mesajEl) {
-          mesajEl.style.display = 'block';
-          mesajEl.textContent   = 'Ödünç alan kişi adı zorunlu';
-        }
+        if (mesajEl) { mesajEl.style.display = 'block'; mesajEl.textContent = 'Ödünç alan kişi adı zorunlu'; }
         document.getElementById('oduncAlanInput')?.focus();
         return;
       }
       if (!gun || gun < 1 || gun > 365) {
-        if (mesajEl) {
-          mesajEl.style.display = 'block';
-          mesajEl.textContent   = 'Gün sayısı 1 ile 365 arasında olmalı';
-        }
+        if (mesajEl) { mesajEl.style.display = 'block'; mesajEl.textContent = 'Gün sayısı 1–365 arasında olmalı'; }
         document.getElementById('oduncGunInput')?.focus();
         return;
       }
@@ -703,8 +815,6 @@ function _oduncModalGoster(defaultGun) {
     }
 
     document.getElementById('oduncOnayBtn').addEventListener('click', _onay);
-
-    // Enter tuşu navigasyonu
     document.getElementById('oduncAlanInput')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') document.getElementById('oduncGunInput')?.focus();
     });
@@ -718,26 +828,20 @@ function _oduncModalGoster(defaultGun) {
 async function loanBook(id) {
   listeMesajTemizle();
 
-  // Ayarlardan varsayılan gün sayısını al (Geliştirme #4)
   let defaultGun = 15;
   try {
     const userKey = typeof getUserKey === 'function' ? getUserKey() : 'demo-user';
     const s = await apiPost({ action: 'settingsGet', userKey });
-    if (s.ok && s.data && s.data.oduncGunSayisi > 0) {
-      defaultGun = s.data.oduncGunSayisi;
-    }
-  } catch (_) { /* ayarlara ulaşılamazsa varsayılan kullanılır */ }
+    if (s.ok && s.data && s.data.oduncGunSayisi > 0) defaultGun = s.data.oduncGunSayisi;
+  } catch (_) {}
 
-  // Modal göster (Geliştirme #3)
   const sonuc = await _oduncModalGoster(defaultGun);
-  if (!sonuc) return; // kullanıcı iptal etti
+  if (!sonuc) return;
 
   const { borrower, gun } = sonuc;
-
-  // İade tarihini hesapla
   const iadeGun = new Date();
   iadeGun.setDate(iadeGun.getDate() + gun);
-  const returnDate = iadeGun.toISOString().slice(0, 10); // YYYY-MM-DD
+  const returnDate = iadeGun.toISOString().slice(0, 10);
 
   try {
     const result = await apiPost({ action: 'loanBook', id, borrower, returnDate });
@@ -763,31 +867,21 @@ async function returnBook(id) {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 (function _init() {
-  // Durum filtresi toggle
   const filtrRafta = document.getElementById('filtrRafta');
   const filtrOdunc = document.getElementById('filtrOdunc');
   if (filtrRafta) filtrRafta.addEventListener('click', () => _toggleDurum('RAFTA'));
   if (filtrOdunc) filtrOdunc.addEventListener('click', () => _toggleDurum('ÖDÜNÇTE'));
 
-  // Yukarı çık
   const scrollTopBtn = document.getElementById('scrollTopBtn');
-  if (scrollTopBtn) {
-    scrollTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-  }
+  if (scrollTopBtn) scrollTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
-  // Arama — anlık filtreleme
   const searchInput = document.getElementById('search');
   if (searchInput) {
-    searchInput.addEventListener('input',  renderList);
+    searchInput.addEventListener('input', renderList);
     searchInput.addEventListener('keyup',  renderList);
   }
 
-  // İlk render (butonları renklendir)
   _topBarRender();
-
-  // A-Z bar kurulum
   _azBarKur();
-
-  // Kitapları yükle
   loadBooks();
 })();
