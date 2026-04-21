@@ -1,6 +1,10 @@
-// js/ekle.js — v63
-// v63: basHarfBuyut global uygulandı (kitapAdi, yazar)
-//      kitapEkle(forceAdd): duplicate:true yanıtında "Yine de Ekle" butonu
+// js/ekle.js — v64
+// v64: 3 düzeltme
+//   1. Duplicate ISBN: isbnBilgisiGetir() → Ekle/Geç panel (hızlı ekle mantığı)
+//      kitapEkle() duplicate yanıtında da Geç butonu eklendi
+//   2. mesajKutusu Kaydet butonunun ÜSTÜNE taşındı (scroll gerekmez)
+//   3. formuTemizle() — Geç aksiyonu için
+// v63: basHarfBuyut global, forceAdd duplicate bypass
 
 // ── Kamera ────────────────────────────────────────────────────────────────
 async function kamerayiBaslatEkle() {
@@ -185,6 +189,7 @@ function ekleForm() {
         word-break:break-word;
       }
 
+      /* mesajKutusu — Kaydet butonunun ÜSTÜNDE, scroll gerekmez */
       .mesajKutusu{
         display:none;
         margin-top:18px;
@@ -257,6 +262,7 @@ function ekleForm() {
 
       <button class="actionBtn secondaryBtn" onclick="isbnBilgisiGetir()">ISBN'den Doldur</button>
 
+      <!-- Kitap önizleme + duplicate seçenek paneli buraya eklenir -->
       <div id="ekleKitapAlani"></div>
 
       <label class="formLabel">Kitap Adı</label>
@@ -274,15 +280,52 @@ function ekleForm() {
       <label class="formLabel">Not</label>
       <textarea class="formTextarea" id="notText" placeholder="İsteğe bağlı not"></textarea>
 
-      <button class="actionBtn greenBtn" id="kaydetBtn" onclick="kitapEkle(false)">Kaydet</button>
-
+      <!-- v64: mesajKutusu Kaydet butonunun ÜSTÜNDE — kullanıcı scroll etmez -->
       <div id="mesajKutusu" class="mesajKutusu"></div>
+
+      <button class="actionBtn greenBtn" id="kaydetBtn" onclick="kitapEkle(false)">Kaydet</button>
     </div>
   `;
 
   setTimeout(() => {
     alan.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
+}
+
+// ── Formu Temizle (Geç aksiyonu) ─────────────────────────────────────────
+function formuTemizle() {
+  ['isbn', 'kitapAdi', 'yazar', 'yayinevi', 'yayinYili', 'notText'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const kartAlani = document.getElementById('ekleKitapAlani');
+  if (kartAlani) kartAlani.innerHTML = '';
+  temizMesaj();
+}
+
+// ── Duplicate seçenek paneli ──────────────────────────────────────────────
+// Hem isbnBilgisiGetir() hem kitapEkle() bu paneli kullanır
+function _ekleGecPaneliGoster(aciklama) {
+  const kutu = document.getElementById('mesajKutusu');
+  if (!kutu) return;
+  kutu.className   = 'mesajKutusu mesaj-warn';
+  kutu.style.display = 'block';
+  kutu.innerHTML   =
+    `<div style="margin-bottom:12px">${guvenliYazi(aciklama)}</div>` +
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">` +
+      `<button onclick="kitapEkle(true)" style="` +
+        `padding:13px;font-size:15px;font-weight:bold;` +
+        `border:none;border-radius:10px;` +
+        `background:#0b57d0;color:#fff;cursor:pointer;` +
+      `">📥 Ekle (2. kopya)</button>` +
+      `<button onclick="formuTemizle()" style="` +
+        `padding:13px;font-size:15px;font-weight:bold;` +
+        `border:none;border-radius:10px;` +
+        `background:#6b7280;color:#fff;cursor:pointer;` +
+      `">✕ Geç</button>` +
+    `</div>`;
+  // Scroll'a gerek kalmadan mesaj görünsün
+  kutu.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── ISBN Lookup ───────────────────────────────────────────────────────────
@@ -300,10 +343,7 @@ async function isbnBilgisiGetir() {
   }
 
   try {
-    const sonuc = await apiPost({
-      action: 'isbnLookup',
-      isbn: isbn
-    });
+    const sonuc = await apiPost({ action: 'isbnLookup', isbn });
 
     if (!sonuc.ok) {
       mesajGoster(sonuc.error || 'Sorgu hatası', 'error');
@@ -319,29 +359,49 @@ async function isbnBilgisiGetir() {
       return;
     }
 
-    // v63: title-case uygula
     const _bh = typeof basHarfBuyut === 'function' ? basHarfBuyut : function(s){ return s; };
 
+    // Form alanlarını doldur
     document.getElementById('isbn').value      = data.isbn      || '';
     document.getElementById('kitapAdi').value  = _bh(data.kitapAdi  || '');
     document.getElementById('yazar').value     = _bh(data.yazar     || '');
     document.getElementById('yayinevi').value  = data.yayinevi  || '';
     document.getElementById('yayinYili').value = data.yayinYili || '';
 
+    // Kitap önizleme kartı
     if (kartAlani) {
       const kapakHtmlStr = data.kapakUrl
-        ? `
-          <div class="kapakWrap">
-            <img
-              class="kapakImg"
+        ? `<div class="kapakWrap">
+            <img class="kapakImg"
               src="${String(data.kapakUrl).replace(/"/g, '&quot;')}"
               alt="Kitap kapağı"
               referrerpolicy="no-referrer"
-              loading="lazy"
-            >
-          </div>
-        `
+              loading="lazy">
+          </div>`
         : '';
+
+      // v64: duplicate ise kart içinde Ekle/Geç seçeneği göster
+      const dupBolumu = data.zatenKayitli ? `
+        <div style="
+          margin-top:14px;padding-top:14px;
+          border-top:2px solid #fdba74;
+        ">
+          <div style="
+            font-size:15px;font-weight:bold;color:#92400e;margin-bottom:10px;
+          ">⚠️ Bu ISBN sistemde zaten kayıtlı. Ne yapmak istiyorsunuz?</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <button onclick="kitapEkle(true)" style="
+              padding:13px;font-size:15px;font-weight:bold;
+              border:none;border-radius:10px;
+              background:#0b57d0;color:#fff;cursor:pointer;
+            ">📥 Ekle (2. kopya)</button>
+            <button onclick="formuTemizle()" style="
+              padding:13px;font-size:15px;font-weight:bold;
+              border:none;border-radius:10px;
+              background:#6b7280;color:#fff;cursor:pointer;
+            ">✕ Geç</button>
+          </div>
+        </div>` : '';
 
       kartAlani.innerHTML = `
         <div class="kitapKart">
@@ -355,13 +415,16 @@ async function isbnBilgisiGetir() {
               <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(data.isbn || '-')}</div>
             </div>
           </div>
+          ${dupBolumu}
         </div>
       `;
+
+      // Kart görünsün
+      kartAlani.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    if (data.zatenKayitli && data.mevcutKayit) {
-      mesajGoster('Bu ISBN sistemde zaten kayıtlı', 'error');
-    } else {
+    // Duplicate ise panel yeterli — ayrı hata mesajı gösterme
+    if (!data.zatenKayitli) {
       mesajGoster('Kitap bilgisi dolduruldu', 'success');
     }
   } catch (err) {
@@ -370,7 +433,6 @@ async function isbnBilgisiGetir() {
 }
 
 // ── Kaydet ────────────────────────────────────────────────────────────────
-// v63: forceAdd=true ile duplicate bypass
 async function kitapEkle(forceAdd) {
   temizMesaj();
 
@@ -402,20 +464,9 @@ async function kitapEkle(forceAdd) {
       return;
     }
 
-    // v63: duplicate:true → "Yine de ekle" seçeneği sun
+    // v64: duplicate → Ekle/Geç seçeneği (Geç de var artık)
     if (sonuc.duplicate) {
-      const kutu = document.getElementById('mesajKutusu');
-      if (kutu) {
-        kutu.className = 'mesajKutusu mesaj-warn';
-        kutu.style.display = 'block';
-        kutu.innerHTML =
-          guvenliYazi('Bu ISBN ile kayıtlı bir kitap zaten var.') +
-          ' <button onclick="kitapEkle(true)" style="' +
-            'display:inline-block;margin-top:10px;padding:10px 18px;' +
-            'font-size:16px;font-weight:bold;border:none;border-radius:10px;' +
-            'background:#0b57d0;color:#fff;cursor:pointer' +
-          '">Yine de Ekle</button>';
-      }
+      _ekleGecPaneliGoster('Bu ISBN ile kayıtlı bir kitap zaten var. İkinci kopya olarak eklemek ister misiniz?');
       return;
     }
 
@@ -427,6 +478,7 @@ async function kitapEkle(forceAdd) {
 
     mesajGoster(mesaj || 'Kitap kaydedildi', 'success');
 
+    // Formu temizle
     document.getElementById('isbn').value      = '';
     document.getElementById('kitapAdi').value  = '';
     document.getElementById('yazar').value     = '';

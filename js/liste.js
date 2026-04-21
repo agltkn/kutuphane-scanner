@@ -1,4 +1,4 @@
-// js/liste.js — v69
+// js/liste.js — v70
 // v69: 4 düzeltme
 //   1. ADET: _normIsbn() — temizIsbn/KutuphaneCamera bağımlılığı kaldırıldı,
 //            tüm sayım tek tutarlı fonksiyonla; console.log ile debug
@@ -449,7 +449,7 @@ function detayAc(id) {
       </div>
 
       <!-- ── Scrollable içerik ── -->
-      <div style="flex:1;overflow-y:auto;padding:0 0 4px 0;">
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:0 0 4px 0;">
 
         <!-- Kapak + üst bilgi -->
         <div style="display:flex;gap:16px;align-items:flex-start;padding:16px 18px">
