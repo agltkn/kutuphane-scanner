@@ -303,6 +303,103 @@ export default {
       }
 
       // ─────────────────────────────────────────────────────────────────────
+      // bookAddForce: bookAdd'ın aynısı — ISBN duplicate kontrolü YOK
+      // İkinci kopya eklemek için kullanılır.
+      if (action === "bookAddForce") {
+        const userKey   = cleanText(body.userKey   || "");
+        const isbn      = cleanIsbn(body.isbn      || "");
+        const kitapAdi  = cleanText(body.kitapAdi  || "");
+        const yazar     = cleanText(body.yazar     || "");
+        const yayinevi  = cleanText(body.yayinevi  || "");
+        const yayinYili = cleanText(body.yayinYili || "");
+        const notText   = cleanText(body.notText   || "");
+
+        if (!userKey) {
+          return jsonResponse(
+            { ok: false, error: "userKey zorunlu" },
+            400,
+            corsHeaders
+          );
+        }
+
+        if (!kitapAdi || !yazar) {
+          return jsonResponse(
+            { ok: false, error: "Kitap adı ve yazar zorunlu" },
+            400,
+            corsHeaders
+          );
+        }
+
+        // ISBN duplicate kontrolü YOK — ikinci kopya doğrudan eklenir
+
+        let settings = await env.DB
+          .prepare("SELECT * FROM user_settings WHERE user_key = ? LIMIT 1")
+          .bind(userKey)
+          .first();
+
+        const now = new Date().toISOString();
+
+        if (!settings) {
+          await env.DB
+            .prepare(`
+              INSERT INTO user_settings
+                (user_key, kod_prefix, kod_ayrac, kod_hane, odunc_gun_sayisi, tema, son_kitap_no, created_at, updated_at)
+              VALUES (?, 'KTP', '-', 4, 15, 'acik', 0, ?, ?)
+            `)
+            .bind(userKey, now, now)
+            .run();
+
+          settings = await env.DB
+            .prepare("SELECT * FROM user_settings WHERE user_key = ? LIMIT 1")
+            .bind(userKey)
+            .first();
+        }
+
+        const kodPrefix   = cleanText(settings.kod_prefix || "KTP");
+        const kodAyrac    = String(settings.kod_ayrac ?? "-");
+        const kodHaneRaw  = Number(settings.kod_hane || 4);
+        const kodHane     = Number.isInteger(kodHaneRaw) && kodHaneRaw > 0 ? kodHaneRaw : 4;
+        const sonKitapNo  = Number(settings.son_kitap_no || 0);
+        const yeniKitapNo = sonKitapNo + 1;
+
+        const bookCode =
+          kodPrefix + kodAyrac + String(yeniKitapNo).padStart(kodHane, "0");
+
+        const sameCode = await env.DB
+          .prepare("SELECT id FROM books WHERE book_code = ? LIMIT 1")
+          .bind(bookCode)
+          .first();
+
+        if (sameCode) {
+          return jsonResponse(
+            { ok: false, error: "Üretilen kitap kodu zaten var: " + bookCode },
+            400,
+            corsHeaders
+          );
+        }
+
+        await env.DB
+          .prepare(`
+            INSERT INTO books
+              (book_code, isbn, title, author, publisher, publish_year, status, borrower, loan_date, return_date, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'RAFTA', '', '', '', ?, ?)
+          `)
+          .bind(bookCode, isbn, kitapAdi, yazar, yayinevi, yayinYili, notText, now)
+          .run();
+
+        await env.DB
+          .prepare("UPDATE user_settings SET son_kitap_no = ?, updated_at = ? WHERE user_key = ?")
+          .bind(yeniKitapNo, now, userKey)
+          .run();
+
+        return jsonResponse(
+          { ok: true, message: "Kitap kaydedildi: " + bookCode },
+          200,
+          corsHeaders
+        );
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
       if (action === "settingsGet") {
         const userKey = cleanText(body.userKey || "");
 

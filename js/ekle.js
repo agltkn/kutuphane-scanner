@@ -1,10 +1,9 @@
-// js/ekle.js — v66
+// js/ekle.js — v67
+// v67: bookAddForce — ikinci kopya için ayrı action
+//   - forceAdd=true → action:"bookAddForce" gönderir (forceAdd flag YOK)
+//   - bookAddForce worker'da ISBN duplicate kontrolü olmayan bağımsız action
+//   - Eski worker "Bilinmeyen action" döndürürse açık hata mesajı gösterilir
 // v66: forceAdd diagnostic
-//   - forceAdd=true iken sonuc.duplicate=true → "Worker deploy edilmemiş" açık hata
-//   - forceAdd=true iken ok=true ama message "kaydedildi" içermiyorsa → açık hata
-//   - Root cause: Cloudflare'e deploy edilmemiş eski worker forceAdd'i tanımıyor,
-//     her duplicate için { ok:true, duplicate:true } döndürüyor.
-//     v65 bunu başarı sayıyordu; v66 gerçek hata mesajı gösteriyor.
 // v65: forceAdd=true: duplicate/zaten kontrolleri atlanır (hızlı_ekle mantığı)
 // v64: Duplicate ISBN: isbnBilgisiGetir() → Ekle/Geç panel, mesajKutusu Kaydet üstüne
 // v63: basHarfBuyut global, forceAdd duplicate bypass
@@ -441,65 +440,64 @@ async function kitapEkle(forceAdd) {
 
   const _bh = typeof basHarfBuyut === 'function' ? basHarfBuyut : function(s){ return s; };
 
+  const kitapAdi  = _bh((document.getElementById('kitapAdi')?.value  || '').trim());
+  const yazar     = _bh((document.getElementById('yazar')?.value     || '').trim());
+
+  if (!kitapAdi || !yazar) {
+    mesajGoster('Kitap adı ve yazar zorunlu', 'warn');
+    return;
+  }
+
+  // v67: forceAdd=true → bookAddForce (ISBN duplicate kontrolü olmayan ayrı action)
+  //      forceAdd=false → bookAdd (normal akış, duplicate kontrolü var)
   const payload = {
-    action:    'bookAdd',
+    action:    forceAdd ? 'bookAddForce' : 'bookAdd',
     userKey:   getUserKey(),
     isbn:      temizIsbn(document.getElementById('isbn')?.value      || ''),
-    kitapAdi:  _bh((document.getElementById('kitapAdi')?.value  || '').trim()),
-    yazar:     _bh((document.getElementById('yazar')?.value     || '').trim()),
+    kitapAdi,
+    yazar,
     yayinevi:  (document.getElementById('yayinevi')?.value  || '').trim(),
     yayinYili: (document.getElementById('yayinYili')?.value || '').trim(),
     notText:   (document.getElementById('notText')?.value   || '').trim()
   };
-
-  if (forceAdd) payload.forceAdd = true;
-
-  if (!payload.kitapAdi || !payload.yazar) {
-    mesajGoster('Kitap adı ve yazar zorunlu', 'warn');
-    return;
-  }
+  // NOT: forceAdd flag payload'a EKLENMİYOR — action adı yeterli
 
   try {
     const sonuc = await apiPost(payload);
 
     if (!sonuc.ok) {
-      mesajGoster(sonuc.error || 'Kayıt hatası', 'error');
-      return;
-    }
-
-    // v66: forceAdd=true → duplicate görmemeli. Görüyorsa worker deploy edilmemiş demektir.
-    if (sonuc.duplicate) {
-      if (forceAdd) {
-        // Worker forceAdd'i tanımıyor (eski deploy) — kullanıcıya açık hata ver
+      // v67: "Bilinmeyen action" → worker eski deploy, bookAddForce tanımıyor
+      if (forceAdd && (sonuc.error || '').includes('Bilinmeyen')) {
         mesajGoster(
-          '⚠️ Worker güncel değil: worker.js\'i Cloudflare\'e yeniden deploy edin.',
+          '⚠️ Worker güncel değil: worker.js\'i Cloudflare\'e deploy edin.',
           'error'
         );
       } else {
-        _ekleGecPaneliGoster('Bu ISBN ile kayıtlı bir kitap zaten var. İkinci kopya olarak eklemek ister misiniz?');
+        mesajGoster(sonuc.error || 'Kayıt hatası', 'error');
       }
+      return;
+    }
+
+    // Normal bookAdd → duplicate kontrolü
+    if (!forceAdd && sonuc.duplicate) {
+      _ekleGecPaneliGoster('Bu ISBN ile kayıtlı bir kitap zaten var. İkinci kopya olarak eklemek ister misiniz?');
       return;
     }
 
     const mesaj = String(sonuc.message || '');
 
-    // forceAdd=true → başarılı insert "kaydedildi" içerir; içermiyorsa hata
-    if (!forceAdd) {
-      if (mesaj.toLowerCase().includes('zaten')) {
-        mesajGoster(mesaj, 'error');
-        return;
-      }
+    if (!forceAdd && mesaj.toLowerCase().includes('zaten')) {
+      mesajGoster(mesaj, 'error');
+      return;
     }
 
     mesajGoster(mesaj || 'Kitap kaydedildi', 'success');
 
     // Formu temizle
-    document.getElementById('isbn').value      = '';
-    document.getElementById('kitapAdi').value  = '';
-    document.getElementById('yazar').value     = '';
-    document.getElementById('yayinevi').value  = '';
-    document.getElementById('yayinYili').value = '';
-    document.getElementById('notText').value   = '';
+    ['isbn', 'kitapAdi', 'yazar', 'yayinevi', 'yayinYili', 'notText'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
 
     const kartAlani = document.getElementById('ekleKitapAlani');
     if (kartAlani) kartAlani.innerHTML = '';
