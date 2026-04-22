@@ -1,9 +1,11 @@
-// js/liste.js — v71
-// v71: Kart sadeleştirme
-//   - Listede gösterilmeyecek: yıl, ödünç alan, ödünç tarihi, iade tarihi
-//   - Adet + durum tek satırda badge olarak gösterilir: "📚 N adet • DURUM"
-//   - Detay ekranı etkilenmedi
-// v70: min-height:0 iOS Safari flex fix (Kapat butonu her zaman görünür)
+// js/liste.js — v72
+// v72: Durum dağılımlı badge
+//   - _isbnSayimHesapla: artık { toplam, rafta, oduncte, kayip } döndürüyor
+//   - renderList: "📚 2 adet • 1 Rafta • 1 Ödünçte" formatında badge
+//   - Renk: tüm rafta → yeşil, tüm ödünçte → kırmızı, karışık → amber
+//   - detayAc: aynı breakdown gösterimi
+// v71: Kart sadeleştirme — yıl, ödünç bilgileri kaldırıldı
+// v70: min-height:0 iOS Safari flex fix
 // v69: 4 düzeltme
 //   1. ADET: _normIsbn() — temizIsbn/KutuphaneCamera bağımlılığı kaldırıldı,
 //            tüm sayım tek tutarlı fonksiyonla; console.log ile debug
@@ -77,13 +79,19 @@ function kapakHtml(book) {
   `;
 }
 
-// ISBN sayım — _normIsbn ile tutarlı, temizIsbn'e bağımlılık YOK
+// ISBN sayım — her ISBN için { toplam, rafta, oduncte, kayip } döndürür
+// v72: durum dağılımı eklendi (önceden sadece toplam sayısı vardı)
 function _isbnSayimHesapla(kitaplar) {
   const sayim = {};
   for (const b of kitaplar) {
     const isbn = _normIsbn(b.isbn);
     if (!isbn) continue;
-    sayim[isbn] = (sayim[isbn] || 0) + 1;
+    if (!sayim[isbn]) sayim[isbn] = { toplam: 0, rafta: 0, oduncte: 0, kayip: 0 };
+    sayim[isbn].toplam++;
+    const d = String(b.durum || 'RAFTA').toUpperCase();
+    if (d === 'ÖDÜNÇTE')    sayim[isbn].oduncte++;
+    else if (d === 'KAYIP') sayim[isbn].kayip++;
+    else                    sayim[isbn].rafta++;
   }
   return sayim;
 }
@@ -314,27 +322,46 @@ function renderList() {
       ? `<button class="btn btnReturn" onclick="event.stopPropagation();returnBook(${Number(book.id)})">İade Al</button>`
       : `<button class="btn btnReturn btnDisabled" disabled>İade Beklemiyor</button>`;
 
-    // _normIsbn — temizIsbn kullanmıyor, doğrudan local fonksiyon
-    const isbnKey    = _normIsbn(book.isbn);
-    const adetSayisi = isbnKey ? (isbnSayim[isbnKey] || 1) : 0;
+    // v72: ISBN bazlı durum dağılımı hesapla
+    const isbnKey  = _normIsbn(book.isbn);
+    const sayimObj = isbnKey ? (isbnSayim[isbnKey] || null) : null;
+    const toplam   = sayimObj ? sayimObj.toplam : 0;
 
-    // v71: adet + durum tek badge — yıl / ödünç bilgileri kaldırıldı (detayda gösterilir)
-    const durumRenk = durum === 'ÖDÜNÇTE'
+    // Bireysel kitap rengi (ISBN yok veya fallback)
+    const bireyselRenk = durum === 'ÖDÜNÇTE'
       ? { bg: '#fee2e2', fg: '#991b1b' }
       : durum === 'KAYIP'
       ? { bg: '#fef3c7', fg: '#92400e' }
       : { bg: '#d1fae5', fg: '#065f46' };
 
-    const adetDurumBadge = isbnKey
+    // Badge: durum dağılımı ve rengi hesapla
+    let badgeBg = bireyselRenk.bg, badgeFg = bireyselRenk.fg;
+    let badgeTekst = guvenliYazi(durum);
+    if (sayimObj) {
+      const p = [];
+      if (sayimObj.rafta   > 0) p.push(`${sayimObj.rafta} Rafta`);
+      if (sayimObj.oduncte > 0) p.push(`${sayimObj.oduncte} Ödünçte`);
+      if (sayimObj.kayip   > 0) p.push(`${sayimObj.kayip} Kayıp`);
+      badgeTekst = p.join(' &bull; ');
+      if (sayimObj.oduncte > 0 && sayimObj.rafta === 0 && sayimObj.kayip === 0) {
+        badgeBg = '#fee2e2'; badgeFg = '#991b1b'; // tümü ödünçte
+      } else if (sayimObj.oduncte > 0 || sayimObj.kayip > 0) {
+        badgeBg = '#fef3c7'; badgeFg = '#92400e'; // karışık
+      } else {
+        badgeBg = '#d1fae5'; badgeFg = '#065f46'; // tümü rafta
+      }
+    }
+
+    const adetDurumBadge = sayimObj
       ? `<span style="
             display:inline-flex;align-items:center;gap:4px;margin-bottom:6px;
-            background:${durumRenk.bg};color:${durumRenk.fg};
+            background:${badgeBg};color:${badgeFg};
             padding:3px 10px;border-radius:999px;
             font-size:12px;font-weight:700;
-          ">📚 ${adetSayisi} adet &bull; ${guvenliYazi(durum)}</span>`
+          ">📚 ${toplam} adet &bull; ${badgeTekst}</span>`
       : `<span style="
             display:inline-flex;align-items:center;gap:4px;margin-bottom:6px;
-            background:${durumRenk.bg};color:${durumRenk.fg};
+            background:${bireyselRenk.bg};color:${bireyselRenk.fg};
             padding:3px 10px;border-radius:999px;
             font-size:12px;font-weight:700;
           ">${guvenliYazi(durum)}</span>`;
@@ -386,18 +413,35 @@ function detayAc(id) {
     ? `<button onclick="returnBook(${Number(book.id)});detayKapat()" style="${_detayBtnStyle('#047857')}">📥 İade Al</button>`
     : '';
 
-  // Adet — _normIsbn ile, tutarlı
+  // Adet + durum dağılımı — v72
   const isbnKey    = _normIsbn(book.isbn);
   const isbnSayim  = _isbnSayimHesapla(books);
-  const adetSayisi = isbnKey ? (isbnSayim[isbnKey] || 1) : 0;
+  const sayimObj   = isbnKey ? (isbnSayim[isbnKey] || null) : null;
+  const toplam     = sayimObj ? sayimObj.toplam : 0;
 
-  const adetSatiri = isbnKey
+  let detayAdetTekst = '';
+  if (sayimObj) {
+    const p = [];
+    if (sayimObj.rafta   > 0) p.push(`${sayimObj.rafta} Rafta`);
+    if (sayimObj.oduncte > 0) p.push(`${sayimObj.oduncte} Ödünçte`);
+    if (sayimObj.kayip   > 0) p.push(`${sayimObj.kayip} Kayıp`);
+    detayAdetTekst = `📚 ${toplam} adet • ${p.join(' • ')}`;
+  }
+
+  const adetSatiri = sayimObj
     ? `<div style="
           display:inline-flex;align-items:center;gap:5px;
           background:#dbeafe;color:#1d4ed8;
           padding:4px 10px;border-radius:999px;
           font-size:12px;font-weight:700;margin-bottom:8px;
-        ">📚 Toplam ${adetSayisi} adet</div>`
+        ">${guvenliYazi(detayAdetTekst)}</div>`
+    : isbnKey
+    ? `<div style="
+          display:inline-flex;align-items:center;gap:5px;
+          background:#dbeafe;color:#1d4ed8;
+          padding:4px 10px;border-radius:999px;
+          font-size:12px;font-weight:700;margin-bottom:8px;
+        ">📚 1 adet</div>`
     : `<div style="
           display:inline-flex;align-items:center;gap:5px;
           background:#f3f4f6;color:#9ca3af;
