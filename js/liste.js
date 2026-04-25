@@ -1,14 +1,14 @@
-// js/liste.js — v82
-// v82: ASCII-safe durum karşılaştırması + v81 compact row fix korundu
-//   1. _durumNorm(): DB'den gelen durum string'ini ASCII-safe koda çevirir
-//      'RAFTA' → 'RAFTA' | 'ÖDÜNÇTE'(ve varyantları) → 'ODUNCTE' | 'KAYIP' → 'KAYIP'
-//   2. Tüm === 'ÖDÜNÇTE' karşılaştırmaları → === 'ODUNCTE' (Turkish char YOK)
-//   3. durumFiltre key 'ÖDÜNÇTE' → 'ODUNCTE'
-//   4. returnBook: k.durum === 'ODUNCTE' — modal artık kesinlikle tetiklenir
-//   5. console.log eklendi (debug)
+// js/liste.js — v83
+// v83: İade seçim modali multi-select + onay butonu
+//   1. _iadeSecimModal: tıklama artık direkt iade yapmaz, toggle seçim yapar
+//   2. Seçili satırlar: yeşil arka plan + ✓ işareti
+//   3. Alt butonlar: [İptal] | [İade Al (X)] — X = seçili sayısı
+//   4. "İade Al" butonu seçim yoksa disabled
+//   5. returnBook: her zaman modal açılır (tek kopya dahil), seçilen tümü iade edilir
+// v82: ASCII-safe durum karşılaştırması (_durumNorm → 'ODUNCTE')
 // v81: Detay kopya satır aralığı azaltıldı (5px 8px / 2px)
 // v80: UI ve akış düzeltmeleri
-// v79: ISBN bazlı gruplama, seçim modali, tüm kopyaları güncelleme
+// v79: ISBN bazlı gruplama
 
 // ── State ─────────────────────────────────────────────────────────────────
 let books     = [];
@@ -16,24 +16,18 @@ let gruplar   = [];
 let _dispGrup = [];
 let _detayGrupIdx = -1;
 
-// v82: ODUNCTE key (ASCII) — Turkish char karşılaştırma sorunu tamamen kaldırıldı
 let durumFiltre = { 'RAFTA': true, 'ODUNCTE': true };
 
 const TR_ALFABE = 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ';
 
 // ── Durum normalize ────────────────────────────────────────────────────────
-// DB'den veya API'den gelen durum string'ini ASCII-safe iç koda çevirir.
-// Böylece tüm karşılaştırmalar Turkish char içermez → encoding sorunu yok.
 function _durumNorm(raw) {
   const s = String(raw || '').trim();
   if (!s || s.toUpperCase() === 'RAFTA') return 'RAFTA';
   if (s.toUpperCase() === 'KAYIP')       return 'KAYIP';
-  // ÖDÜNÇTE — ilk karakter Ö (U+00D6=214) veya ö (U+00F6=246), ya da büyük harfli variant
   const c0 = s.charCodeAt(0);
   if (c0 === 214 || c0 === 246) return 'ODUNCTE';
-  // Fallback: içeriğe göre
-  const up = s.toUpperCase();
-  if (up.indexOf('D\u00DCN') !== -1) return 'ODUNCTE'; // ÜN kısmı — 'DÜNÇ' içeriyor
+  if (s.toUpperCase().indexOf('D\u00DCN') !== -1) return 'ODUNCTE';
   return 'RAFTA';
 }
 
@@ -66,7 +60,6 @@ function _grupla(kitaplar) {
       });
     }
     const g = map.get(key);
-    // v82: _durumNorm → ASCII-safe internal code ('RAFTA' | 'ODUNCTE' | 'KAYIP')
     const normDurum = _durumNorm(b.durum);
     g.kopya.push(Object.assign({}, b, { durum: normDurum }));
     g.toplam++;
@@ -195,7 +188,6 @@ function _autocompleteTemizle() {
 function _topBarRender() {
   const r = document.getElementById('filtrRafta');
   const o = document.getElementById('filtrOdunc');
-  // v82: durumFiltre key 'ODUNCTE' (ASCII-safe)
   if (r) { r.style.background = durumFiltre['RAFTA']   ? '#047857' : '#374151'; r.style.color = '#fff'; r.style.opacity = durumFiltre['RAFTA']   ? '1' : '0.45'; }
   if (o) { o.style.background = durumFiltre['ODUNCTE'] ? '#b91c1c' : '#374151'; o.style.color = '#fff'; o.style.opacity = durumFiltre['ODUNCTE'] ? '1' : '0.45'; }
 }
@@ -281,7 +273,6 @@ function renderList() {
   const list = document.getElementById('list');
   if (!list) return;
 
-  // v82: durumFiltre key 'ODUNCTE' (ASCII-safe)
   let filtered = gruplar.filter(g => {
     const durumOk = (durumFiltre['RAFTA'] && g.rafta > 0) || (durumFiltre['ODUNCTE'] && g.oduncte > 0);
     if (!durumOk) return false;
@@ -308,12 +299,10 @@ function renderList() {
   list.innerHTML = filtered.map((g, i) => {
     const badge = _durumBadge(g);
 
-    // Buton 1: Ödünç Ver
     const loanBtn = g.rafta > 0
       ? `<button class="btn btnLoan"     onclick="event.stopPropagation();loanBook(${i})">📤 Ödünç Ver</button>`
       : `<button class="btn btnDisabled" disabled>Ödünç Verilemez</button>`;
 
-    // Buton 2: İade Al — returnBook selection modal mantığı korunuyor
     const retBtn = g.oduncte > 0
       ? `<button class="btn btnReturn"   onclick="event.stopPropagation();returnBook(${i})">📥 İade Al</button>`
       : `<button class="btn btnDisabled" disabled>İade Beklemiyor</button>`;
@@ -361,10 +350,8 @@ function detayAc(grupIdx) {
   const yazarOner = [...new Set(books.map(b => b.yazar   ).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
   const yayiOner  = [...new Set(books.map(b => b.yayinevi).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
 
-  // Kopyalar — v82: k.durum artık 'ODUNCTE' | 'RAFTA' | 'KAYIP' (ASCII)
   const kopyaHtml = g.kopya.map(k => {
     const d      = String(k.durum || 'RAFTA');
-    // v82: ASCII-safe karşılaştırma
     const dClass = d === 'ODUNCTE' ? 'oduncte' : d === 'KAYIP' ? 'kayip' : 'rafta';
     const dMetin = d === 'ODUNCTE' ? 'Ödünçte' : d === 'KAYIP' ? 'Kayıp' : 'Rafta';
     let ekBilgi  = '';
@@ -374,7 +361,6 @@ function detayAc(grupIdx) {
         : '';
       ekBilgi = guvenliYazi(k.oduncAlan + (tarih ? ' · ' + tarih : ''));
     }
-    // v81: padding 5px 8px, margin-bottom 2px
     return `
       <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;
                   border-radius:10px;background:#f9fafb;margin-bottom:2px;">
@@ -408,7 +394,6 @@ function detayAc(grupIdx) {
       display:flex;flex-direction:column;
       box-shadow:0 -8px 32px rgba(0,0,0,0.18);">
 
-      <!-- Header -->
       <div style="flex-shrink:0;background:#fff;border-radius:22px 22px 0 0;
                   display:flex;align-items:center;justify-content:space-between;
                   padding:12px 16px 10px;border-bottom:1px solid #f3f4f6;">
@@ -423,10 +408,8 @@ function detayAc(grupIdx) {
           -webkit-tap-highlight-color:transparent;">✕</button>
       </div>
 
-      <!-- Scrollable içerik -->
       <div style="flex:1;min-height:0;overflow-y:auto;padding:0 0 4px 0;">
 
-        <!-- Kapak + üst bilgi -->
         <div style="display:flex;gap:16px;align-items:flex-start;padding:16px 18px">
           <div style="flex-shrink:0;position:relative;cursor:pointer"
                onclick="document.getElementById('detayKapakInput').click()"
@@ -457,7 +440,6 @@ function detayAc(grupIdx) {
           </div>
         </div>
 
-        <!-- Kopyalar listesi — v82: ASCII-safe durum + v81 kompakt satırlar -->
         <div style="padding:0 18px 18px">
           <div style="font-size:13px;font-weight:700;color:#6b7280;
                       text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">
@@ -466,7 +448,6 @@ function detayAc(grupIdx) {
           ${kopyaHtml}
         </div>
 
-        <!-- Düzenleme formu -->
         <div style="padding:0 18px 18px;border-top:1px solid #f3f4f6">
           <div style="font-size:13px;font-weight:700;color:#6b7280;
                       text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 12px">
@@ -493,21 +474,18 @@ function detayAc(grupIdx) {
           <input id="detayEditYil" type="text" value="${safeAttr(g.yayinYili || '')}"
                  style="${_detayInputStyle()}" autocomplete="off">
 
-          <!-- Hata mesajı — Kaydet hatası burada görünür -->
           <div id="detayMesaj" style="display:none;margin-top:10px;padding:10px 14px;
                                        border-radius:10px;font-size:15px;font-weight:bold"></div>
         </div>
 
-      </div><!-- /scrollable -->
+      </div>
 
-      <!-- Sticky footer — 3 sabit buton: [Ödünç Ver] [Kaydet] [Kapat] -->
       <div style="
         flex-shrink:0;
         padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
         border-top:1px solid #f3f4f6;background:#fff;">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
 
-          <!-- Ödünç Ver: rafta varsa aktif, yoksa pasif -->
           ${g.rafta > 0
             ? `<button onclick="_detayLoan()" style="
                 padding:13px 6px;font-size:13px;font-weight:700;line-height:1.2;
@@ -522,7 +500,6 @@ function detayAc(grupIdx) {
                 📤 Ödünç<br>Ver
               </button>`}
 
-          <!-- Kaydet -->
           <button onclick="detayKaydet()" style="
             padding:13px 6px;font-size:13px;font-weight:700;line-height:1.2;
             border:none;border-radius:12px;background:#047857;color:#fff;
@@ -530,7 +507,6 @@ function detayAc(grupIdx) {
             💾 Kaydet
           </button>
 
-          <!-- Kapat -->
           <button onclick="detayKapat()" style="
             padding:13px 6px;font-size:13px;font-weight:700;line-height:1.2;
             border:none;border-radius:12px;background:#1f2937;color:#fff;
@@ -557,7 +533,6 @@ function detayAc(grupIdx) {
   _autocompleteSetup(document.getElementById('detayEditYayinevi'), yayiOner);
 }
 
-// Detay footer Ödünç Ver — _detayGrupIdx üzerinden
 function _detayLoan() {
   if (_detayGrupIdx < 0) return;
   const idx = _detayGrupIdx;
@@ -565,7 +540,6 @@ function _detayLoan() {
   loanBook(idx);
 }
 
-// Detay kopya satırındaki İade butonu — direkt kitap id ile çalışır
 async function _iadeKopyaIade(bookId) {
   try {
     const result = await apiPost({ action: 'returnBook', id: bookId });
@@ -770,63 +744,147 @@ function _oduncModalGoster(defaultGun) {
   });
 }
 
-// ── İade Seçim Modali ─────────────────────────────────────────────────────
-// Birden fazla ODUNCTE kopya varsa kullanıcıya seçim yaptırır.
-// RAFTA olanlar asla bu listede görünmez.
+// ── İade Seçim Modali — v83: multi-select + onay butonu ───────────────────
+// Sadece ODUNCTE kopyalar gösterilir. RAFTA asla gösterilmez.
+// Tıklama → toggle seçim. Seçili satır: yeşil + ✓
+// Alt footer: [İptal] | [İade Al (X)] — X = seçili sayısı, X=0 ise disabled.
+// Promise → seçilen kopya dizisi (boş iptal = null)
 function _iadeSecimModal(oduncteKopyalar) {
   return new Promise(resolve => {
     document.getElementById('iadeSecimOverlay')?.remove();
+
+    // Seçili satır indeksleri (oduncteKopyalar dizisindeki index)
+    const selectedIdxs = new Set();
 
     const overlay = document.createElement('div');
     overlay.id = 'iadeSecimOverlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:3500;background:rgba(0,0,0,0.55);' +
       'display:flex;align-items:flex-end;justify-content:center;';
 
-    const itemsHtml = oduncteKopyalar.map((k, i) => {
-      const tarih = k.oduncTarihi
-        ? new Date(k.oduncTarihi).toLocaleDateString('tr-TR', { day:'numeric', month:'numeric', year:'numeric' })
-        : '';
-      const label = [k.kitapKodu, k.oduncAlan, tarih].filter(Boolean).join(' — ');
-      return `<button data-idx="${i}" style="
-        display:block;width:100%;text-align:left;padding:14px 18px;
-        font-size:15px;font-weight:600;
-        border:none;border-bottom:1px solid #f3f4f6;
-        background:#fff;cursor:pointer;color:#111;
-        -webkit-tap-highlight-color:transparent;">${guvenliYazi(label)}</button>`;
-    }).join('');
-
     overlay.innerHTML = `
-      <div id="iadeSecimPanel" style="background:#fff;border-radius:22px 22px 0 0;
-        width:100%;max-width:500px;box-shadow:0 -8px 32px rgba(0,0,0,0.18);overflow:hidden;">
-        <div style="padding:16px 18px 12px;border-bottom:1px solid #f3f4f6;
+      <div id="iadeSecimPanel" style="
+        background:#fff;border-radius:22px 22px 0 0;
+        width:100%;max-width:500px;
+        display:flex;flex-direction:column;
+        max-height:70vh;
+        box-shadow:0 -8px 32px rgba(0,0,0,0.18);">
+
+        <!-- Başlık -->
+        <div style="flex-shrink:0;padding:16px 18px 12px;border-bottom:1px solid #f3f4f6;
                     display:flex;align-items:center;gap:10px;">
           <div style="width:36px;height:4px;border-radius:2px;background:#d1d5db"></div>
-          <span style="font-size:16px;font-weight:700;color:#111">📥 Hangi Kopya İade Ediliyor?</span>
+          <span style="font-size:16px;font-weight:700;color:#111">📥 İade Edilecek Kopya(ları) Seçin</span>
         </div>
-        <div style="max-height:50vh;overflow-y:auto;">${itemsHtml}</div>
-        <div style="padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));">
-          <button id="iadeIptalBtn" style="display:block;width:100%;padding:13px;
-            font-size:15px;font-weight:700;border:none;border-radius:12px;
-            background:#f3f4f6;color:#374151;cursor:pointer;">İptal</button>
+
+        <!-- Kopya listesi -->
+        <div id="iadeSecimList" style="flex:1;min-height:0;overflow-y:auto;"></div>
+
+        <!-- Footer butonları -->
+        <div style="flex-shrink:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+                    border-top:1px solid #f3f4f6;
+                    display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button id="iadeIptalBtn" style="
+            padding:13px;font-size:15px;font-weight:700;
+            border:none;border-radius:12px;
+            background:#f3f4f6;color:#374151;cursor:pointer;
+            -webkit-tap-highlight-color:transparent;">İptal</button>
+          <button id="iadeOnayBtn" disabled style="
+            padding:13px;font-size:15px;font-weight:700;
+            border:none;border-radius:12px;
+            background:#e5e7eb;color:#9ca3af;cursor:not-allowed;
+            -webkit-tap-highlight-color:transparent;">İade Al (0)</button>
         </div>
       </div>`;
 
     document.body.appendChild(overlay);
 
-    const panel = overlay.querySelector('#iadeSecimPanel');
+    const panel   = overlay.querySelector('#iadeSecimPanel');
+    const listEl  = overlay.querySelector('#iadeSecimList');
+    const onayBtn = overlay.querySelector('#iadeOnayBtn');
+
+    // ── Satırları render et ───────────────────────────────────────────────
+    function _renderRows() {
+      listEl.innerHTML = oduncteKopyalar.map((k, i) => {
+        const secili = selectedIdxs.has(i);
+        const tarih  = k.oduncTarihi
+          ? new Date(k.oduncTarihi).toLocaleDateString('tr-TR', { day:'numeric', month:'numeric', year:'numeric' })
+          : '';
+        const label  = [k.kitapKodu, k.oduncAlan, tarih].filter(Boolean).join(' — ');
+
+        return `
+          <div data-row-idx="${i}" style="
+            display:flex;align-items:center;justify-content:space-between;
+            padding:14px 18px;
+            border-bottom:1px solid #f3f4f6;
+            cursor:pointer;
+            background:${secili ? '#d1fae5' : '#fff'};
+            color:${secili ? '#065f46' : '#111'};
+            -webkit-tap-highlight-color:transparent;
+            transition:background 0.12s;">
+            <span style="font-size:15px;font-weight:600;">${guvenliYazi(label)}</span>
+            ${secili
+              ? '<span style="font-size:20px;font-weight:900;color:#047857;flex-shrink:0;margin-left:8px;">✓</span>'
+              : '<span style="font-size:20px;color:transparent;flex-shrink:0;margin-left:8px;">✓</span>'}
+          </div>`;
+      }).join('');
+
+      // Tıklama → toggle
+      listEl.querySelectorAll('[data-row-idx]').forEach(row => {
+        row.addEventListener('click', () => {
+          const idx = parseInt(row.dataset.rowIdx, 10);
+          if (selectedIdxs.has(idx)) {
+            selectedIdxs.delete(idx);
+          } else {
+            selectedIdxs.add(idx);
+          }
+          _renderRows();
+          _updateOnayBtn();
+        });
+      });
+    }
+
+    // ── Onay butonu güncelle ──────────────────────────────────────────────
+    function _updateOnayBtn() {
+      const count = selectedIdxs.size;
+      if (count === 0) {
+        onayBtn.disabled         = true;
+        onayBtn.style.background = '#e5e7eb';
+        onayBtn.style.color      = '#9ca3af';
+        onayBtn.style.cursor     = 'not-allowed';
+        onayBtn.textContent      = 'İade Al (0)';
+      } else {
+        onayBtn.disabled         = false;
+        onayBtn.style.background = '#047857';
+        onayBtn.style.color      = '#fff';
+        onayBtn.style.cursor     = 'pointer';
+        onayBtn.textContent      = `İade Al (${count})`;
+      }
+    }
+
+    // İlk render
+    _renderRows();
+
+    // Animate in
     panel.style.transform  = 'translateY(100%)';
     panel.style.transition = 'transform 0.25s ease';
     requestAnimationFrame(() => { panel.style.transform = 'translateY(0)'; });
 
+    // ── Kapat yardımcısı ──────────────────────────────────────────────────
     function _kapat(result) {
       panel.style.transform = 'translateY(100%)';
       setTimeout(() => overlay.remove(), 250);
       resolve(result);
     }
-    document.getElementById('iadeIptalBtn').addEventListener('click', () => _kapat(null));
+
+    // İptal
+    overlay.querySelector('#iadeIptalBtn').addEventListener('click', () => _kapat(null));
+    // Overlay dışı tıklama
     overlay.addEventListener('click', e => { if (e.target === overlay) _kapat(null); });
-    overlay.querySelectorAll('[data-idx]').forEach(btn => {
-      btn.addEventListener('click', () => _kapat(oduncteKopyalar[parseInt(btn.dataset.idx, 10)]));
+    // Onay — seçilen kopyaları dizi olarak döndür
+    onayBtn.addEventListener('click', () => {
+      if (selectedIdxs.size === 0) return;
+      const secilen = [...selectedIdxs].sort().map(i => oduncteKopyalar[i]);
+      _kapat(secilen);
     });
   });
 }
@@ -837,7 +895,6 @@ async function loanBook(grupIdx) {
   const g = _dispGrup[grupIdx];
   if (!g) return;
 
-  // v82: 'RAFTA' ASCII-safe — sorun yok
   const hedef = g.kopya.find(k => k.durum === 'RAFTA');
   if (!hedef) { listeMesaj('Rafta kopya bulunamadı', 'error'); return; }
 
@@ -866,37 +923,39 @@ async function loanBook(grupIdx) {
   }
 }
 
-// v82: returnBook — 'ODUNCTE' (ASCII-safe) karşılaştırma
-// ÖDÜNÇTE Turkish char içerdiği için === karşılaştırması ortama göre fail edebilir.
-// _durumNorm() 'ODUNCTE' döndürdüğü için bu filter 100% güvenilir.
+// v83: returnBook — her zaman seçim modali açılır (tek kopya dahil)
+// Modal → Promise<kopya[]|null>
+// Seçilen her kopya için returnBook API çağrısı yapılır.
 async function returnBook(grupIdx) {
   listeMesajTemizle();
   const g = _dispGrup[grupIdx];
   if (!g) { console.warn('[returnBook] geçersiz grupIdx:', grupIdx); return; }
 
-  // v82: ASCII-safe — Turkish char yok, comparison kesinlikle doğru çalışır
+  // Sadece ODUNCTE kopyalar — RAFTA asla dahil edilmez
   const oduncteKopyalar = g.kopya.filter(k => k.durum === 'ODUNCTE');
   console.log('[returnBook] grup:', g.kitapAdi,
     '| kopyalar:', g.kopya.map(k => k.kitapKodu + ':' + k.durum),
-    '| oduncte bulundu:', oduncteKopyalar.length);
+    '| oduncte:', oduncteKopyalar.length);
 
   if (!oduncteKopyalar.length) { listeMesaj('Ödünçte kopya bulunamadı', 'error'); return; }
 
-  let hedef;
-  if (oduncteKopyalar.length === 1) {
-    // Tek ODUNCTE kopya → direkt iade
-    hedef = oduncteKopyalar[0];
-  } else {
-    // Birden fazla ODUNCTE → seçim modali — RAFTA olanlar asla görünmez
-    console.log('[returnBook] seçim modali açılıyor, kopya sayısı:', oduncteKopyalar.length);
-    hedef = await _iadeSecimModal(oduncteKopyalar);
-    if (!hedef) return;
-  }
+  // Her zaman modal aç — kullanıcı seçip onaylar
+  const secilenler = await _iadeSecimModal(oduncteKopyalar);
+  if (!secilenler || !secilenler.length) return;  // İptal
 
   try {
-    const result = await apiPost({ action: 'returnBook', id: hedef.id });
-    if (!result.ok) { listeMesaj(result.error || 'İade hatası', 'error'); return; }
-    listeMesaj(result.message || 'Kitap iade alındı', 'success');
+    // Seçilen tüm kopyaları iade et
+    const results = await Promise.all(
+      secilenler.map(k => apiPost({ action: 'returnBook', id: k.id }))
+    );
+    const hata = results.find(r => !r.ok);
+    if (hata) { listeMesaj(hata.error || 'İade hatası', 'error'); return; }
+
+    const count = secilenler.length;
+    const mesaj = count === 1
+      ? (results[0].message || 'Kitap iade alındı')
+      : `${count} kitap iade alındı`;
+    listeMesaj(mesaj, 'success');
     await loadBooks();
   } catch (err) {
     listeMesaj('İade hatası: ' + err.message, 'error');
@@ -906,7 +965,6 @@ async function returnBook(grupIdx) {
 // ── Init ──────────────────────────────────────────────────────────────────
 (function _init() {
   document.getElementById('filtrRafta')?.addEventListener('click', () => _toggleDurum('RAFTA'));
-  // v82: 'ODUNCTE' (ASCII-safe key) — Turkish char içermez
   document.getElementById('filtrOdunc')?.addEventListener('click', () => _toggleDurum('ODUNCTE'));
   document.getElementById('scrollTopBtn')?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
