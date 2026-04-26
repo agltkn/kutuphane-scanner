@@ -1,4 +1,9 @@
-// js/liste.js — v86
+// js/liste.js — v87
+// v87: Ödünç verme akışına kopya seçim modalı eklendi
+//   1. _oduncKopyaSecimModal(raftaKopyalar): tek-seçimli bottom-sheet
+//      — satıra tıklayınca seçilir ve modal kapanır
+//   2. loanBook: 0 RAFTA → hata | 1 RAFTA → direkt | 2+ → kopya seçim modalı
+//   3. _detayLoan zaten loanBook'a delege ediyor — otomatik çalışır
 // v86: Per-kopya iade sonrası detay ekranı açık kalır
 //   1. _iadeKopyaIade: detayKapat() çağrısı kaldırıldı
 //   2. İade başarılı olunca: loadBooks() → aynı grubu grupKey ile bul →
@@ -862,6 +867,86 @@ function _oduncModalGoster(defaultGun) {
   });
 }
 
+// ── Ödünç Kopya Seçim Modali ──────────────────────────────────────────────
+// Sadece RAFTA kopyalar listelenir. Satıra tek tıklama → seçim yapılır ve
+// modal kapanır. Promise → seçilen kopya objesi | null (iptal).
+function _oduncKopyaSecimModal(raftaKopyalar) {
+  return new Promise(resolve => {
+    document.getElementById('oduncKopyaSecimOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'oduncKopyaSecimOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:3500;background:rgba(0,0,0,0.55);' +
+      'display:flex;align-items:flex-end;justify-content:center;';
+
+    overlay.innerHTML = `
+      <div id="oduncKopyaSecimPanel" style="
+        background:#fff;border-radius:22px 22px 0 0;
+        width:100%;max-width:500px;
+        display:flex;flex-direction:column;
+        max-height:70vh;
+        box-shadow:0 -8px 32px rgba(0,0,0,0.18);">
+
+        <div style="flex-shrink:0;padding:16px 18px 12px;border-bottom:1px solid #f3f4f6;
+                    display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:4px;border-radius:2px;background:#d1d5db"></div>
+          <span style="font-size:16px;font-weight:700;color:#111">📤 Ödünç Verilecek Kopyayı Seçin</span>
+        </div>
+
+        <div id="oduncKopyaSecimList" style="flex:1;min-height:0;overflow-y:auto;"></div>
+
+        <div style="flex-shrink:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+                    border-top:1px solid #f3f4f6;">
+          <button id="oduncKopyaIptalBtn" style="
+            width:100%;padding:13px;font-size:15px;font-weight:700;
+            border:none;border-radius:12px;
+            background:#f3f4f6;color:#374151;cursor:pointer;
+            -webkit-tap-highlight-color:transparent;">İptal</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const panel  = overlay.querySelector('#oduncKopyaSecimPanel');
+    const listEl = overlay.querySelector('#oduncKopyaSecimList');
+
+    listEl.innerHTML = raftaKopyalar.map((k, i) => `
+      <div data-kopya-idx="${i}" style="
+        display:flex;align-items:center;justify-content:space-between;
+        padding:14px 18px;border-bottom:1px solid #f3f4f6;
+        cursor:pointer;background:#fff;
+        -webkit-tap-highlight-color:transparent;">
+        <span style="font-family:monospace;font-size:15px;font-weight:700;color:#111;">
+          ${guvenliYazi(k.kitapKodu || '-')}
+        </span>
+        <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;
+                     background:#d1fae5;color:#065f46;">Rafta</span>
+      </div>`
+    ).join('');
+
+    panel.style.transform  = 'translateY(100%)';
+    panel.style.transition = 'transform 0.25s ease';
+    requestAnimationFrame(() => { panel.style.transform = 'translateY(0)'; });
+
+    function _kapat(result) {
+      panel.style.transform = 'translateY(100%)';
+      setTimeout(() => overlay.remove(), 250);
+      resolve(result);
+    }
+
+    // Satıra tıklama → direkt seç ve kapat
+    listEl.querySelectorAll('[data-kopya-idx]').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = parseInt(row.dataset.kopyaIdx, 10);
+        _kapat(raftaKopyalar[idx]);
+      });
+    });
+
+    overlay.querySelector('#oduncKopyaIptalBtn').addEventListener('click', () => _kapat(null));
+    overlay.addEventListener('click', e => { if (e.target === overlay) _kapat(null); });
+  });
+}
+
 // ── İade Seçim Modali — v83: multi-select + onay butonu ───────────────────
 // Sadece ODUNCTE kopyalar gösterilir. RAFTA asla gösterilmez.
 // Tıklama → toggle seçim. Seçili satır: yeşil + ✓
@@ -1008,13 +1093,26 @@ function _iadeSecimModal(oduncteKopyalar) {
 }
 
 // ── Ödünç / İade ──────────────────────────────────────────────────────────
+// v87: kopya seçim akışı
+//   0 RAFTA → hata mesajı
+//   1 RAFTA → direkt ödünç modalına geç
+//   2+ RAFTA → önce _oduncKopyaSecimModal, seçilen kopya ile devam et
 async function loanBook(grupIdx) {
   listeMesajTemizle();
   const g = _dispGrup[grupIdx];
   if (!g) return;
 
-  const hedef = g.kopya.find(k => k.durum === 'RAFTA');
-  if (!hedef) { listeMesaj('Rafta kopya bulunamadı', 'error'); return; }
+  const raftaKopyalar = g.kopya.filter(k => k.durum === 'RAFTA');
+  if (!raftaKopyalar.length) { listeMesaj('Rafta kopya bulunamadı', 'error'); return; }
+
+  // Tek kopya varsa direkt seç; birden fazlaysa kullanıcıya seçtir
+  let hedef;
+  if (raftaKopyalar.length === 1) {
+    hedef = raftaKopyalar[0];
+  } else {
+    hedef = await _oduncKopyaSecimModal(raftaKopyalar);
+    if (!hedef) return; // İptal
+  }
 
   let defaultGun = 15;
   try {
