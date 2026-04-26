@@ -1,4 +1,8 @@
-// js/liste.js — v83
+// js/liste.js — v84
+// v84: Detay ekranı UI iyileştirmeleri
+//   1. Kopya durumu renkleri: RAFTA=yeşil, ÖDÜNÇTE=sarı (kırmızıdan değiştirildi)
+//   2. Per-kopya İade butonu: window.confirm() onayı eklendi (önce sormadan iade etmiyordu)
+//   3. Detay başlık: kitap adı daha büyük/kalın (24px/800), yazar normal, ISBN küçük+gri
 // v83: İade seçim modali multi-select + onay butonu
 //   1. _iadeSecimModal: tıklama artık direkt iade yapmaz, toggle seçim yapar
 //   2. Seçili satırlar: yeşil arka plan + ✓ işareti
@@ -431,12 +435,12 @@ function detayAc(grupIdx) {
                          padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;">
               📚 ${g.toplam} adet &bull; ${guvenliYazi(badge.tekst)}
             </span>
-            <div style="font-size:20px;font-weight:bold;line-height:1.3;margin-bottom:6px;word-break:break-word">
+            <div style="font-size:24px;font-weight:800;line-height:1.25;margin-bottom:6px;word-break:break-word;color:#111;">
               ${guvenliYazi(g.kitapAdi || '-')}
             </div>
-            <div style="font-size:14px;color:#555;margin-bottom:4px">${guvenliYazi(g.yazar || '-')}</div>
-            ${g.isbn     ? `<div style="font-size:13px;color:#6b7280;margin-bottom:4px;font-family:monospace;">ISBN: ${guvenliYazi(g.isbn)}</div>` : ''}
-            ${g.yayinevi ? `<div style="font-size:13px;color:#6b7280;">${guvenliYazi(g.yayinevi)}</div>` : ''}
+            <div style="font-size:15px;color:#374151;margin-bottom:6px;">${guvenliYazi(g.yazar || '-')}</div>
+            ${g.yayinevi ? `<div style="font-size:14px;color:#6b7280;margin-bottom:4px;">${guvenliYazi(g.yayinevi)}</div>` : ''}
+            ${g.isbn     ? `<div style="font-size:11px;color:#9ca3af;font-family:monospace;letter-spacing:0.3px;">ISBN ${guvenliYazi(g.isbn)}</div>` : ''}
           </div>
         </div>
 
@@ -541,6 +545,7 @@ function _detayLoan() {
 }
 
 async function _iadeKopyaIade(bookId) {
+  if (!window.confirm('Bu kopyayı iade almak istediğinize emin misiniz?')) return;
   try {
     const result = await apiPost({ action: 'returnBook', id: bookId });
     if (!result.ok) {
