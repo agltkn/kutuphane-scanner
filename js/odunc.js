@@ -1,3 +1,14 @@
+// js/odunc.js — v2
+// v2: ISBN aramasında tüm kopyalar dikkate alınır
+//   1. _oduncNorm(): Unicode-safe durum normalizer (liste.js / iade_v2.js ile aynı)
+//   2. oduncKitapBul(): kitaplar.find() → filter() — tüm kopyaları tarar
+//      0 RAFTA → "rafta uygun kopya yok"
+//      1 RAFTA → tek kopya kartı, otomatik seçilir
+//      2+ RAFTA → çoklu seçim UI, satıra tıklayınca seçilir
+//   3. oduncVer(): window.seciliOduncKopya üzerinden çalışır
+//   4. No worker.js change — booksList zaten tüm kopyaları döndürüyor
+
+// ── Kamera ────────────────────────────────────────────────────────────────
 async function kamerayiBaslatOdunc() {
   await kameraBaslat({
     inputId: 'oduncIsbn',
@@ -6,8 +17,21 @@ async function kamerayiBaslatOdunc() {
   });
 }
 
+// ── Unicode-safe durum normalizer ─────────────────────────────────────────
+// liste.js _durumNorm / iade_v2.js _iadeNorm ile aynı mantık
+function _oduncNorm(raw) {
+  const s = String(raw || '').trim();
+  if (!s || s.toUpperCase() === 'RAFTA') return 'RAFTA';
+  if (s.toUpperCase() === 'KAYIP')       return 'KAYIP';
+  const c0 = s.charCodeAt(0);
+  if (c0 === 214 || c0 === 246) return 'ODUNCTE'; // Ö veya ö
+  if (s.toUpperCase().indexOf('D\u00DCN') !== -1) return 'ODUNCTE';
+  return 'RAFTA';
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────
 function oduncVerForm() {
-  window.seciliOduncKitap = null;
+  window.seciliOduncKopya = null; // replaces seciliOduncKitap
 
   const alan = document.getElementById('formAlani');
   if (!alan) return;
@@ -133,15 +157,8 @@ function oduncVerForm() {
         margin-top:8px;
       }
 
-      .rafta{
-        background:#d1fae5;
-        color:#065f46;
-      }
-
-      .oduncte{
-        background:#fee2e2;
-        color:#991b1b;
-      }
+      .rafta   { background:#d1fae5; color:#065f46; }
+      .oduncte { background:#fef3c7; color:#92400e; }
 
       .mesajKutusu{
         display:none;
@@ -154,28 +171,12 @@ function oduncVerForm() {
         word-break:break-word;
       }
 
-      .mesaj-success{
-        display:block;
-        background:#d1fae5;
-        color:#065f46;
-      }
-
-      .mesaj-error{
-        display:block;
-        background:#fee2e2;
-        color:#991b1b;
-      }
-
-      .mesaj-warn{
-        display:block;
-        background:#ffedd5;
-        color:#9a3412;
-      }
+      .mesaj-success { display:block; background:#d1fae5; color:#065f46; }
+      .mesaj-error   { display:block; background:#fee2e2; color:#991b1b; }
+      .mesaj-warn    { display:block; background:#ffedd5; color:#9a3412; }
 
       @media (max-width:640px){
-        .topActions{
-          grid-template-columns:1fr;
-        }
+        .topActions{ grid-template-columns:1fr; }
       }
     </style>
 
@@ -202,7 +203,7 @@ function oduncVerForm() {
       <label class="formLabel">Kime Verildi</label>
       <input class="formInput" type="text" id="oduncAlan" placeholder="Ad Soyad">
 
-      <button class="actionBtn greenBtn" onclick="oduncVer()">Ödünç Ver</button>
+      <button class="actionBtn greenBtn" onclick="oduncVer()">📤 Ödünç Ver</button>
 
       <div id="mesajKutusu" class="mesajKutusu"></div>
     </div>
@@ -213,61 +214,139 @@ function oduncVerForm() {
   }, 100);
 }
 
+// ── Kitabı Bul ────────────────────────────────────────────────────────────
 async function oduncKitapBul(suppressStatusMessage = false) {
   temizMesaj();
-  window.seciliOduncKitap = null;
+  window.seciliOduncKopya = null;
 
   const alan = document.getElementById('oduncKitapAlani');
   if (alan) alan.innerHTML = '';
 
   try {
     const isbn = temizIsbn(document.getElementById('oduncIsbn')?.value || '');
-    if (!isbn) {
-      mesajGoster('Önce ISBN girin veya okutun', 'warn');
-      return;
-    }
+    if (!isbn) { mesajGoster('Önce ISBN girin veya okutun', 'warn'); return; }
 
     const kitaplar = await tumKitaplariGetir();
-    const kitap = kitaplar.find(k => temizIsbn(k.isbn || '') === isbn);
 
-    if (!kitap) {
+    // Tüm eşleşen kopyaları bul — find() değil filter()
+    const eslesen = kitaplar.filter(k => temizIsbn(k.isbn || '') === isbn);
+
+    if (!eslesen.length) {
       mesajGoster('Bu ISBN ile kayıtlı kitap bulunamadı', 'warn');
       return;
     }
 
-    window.seciliOduncKitap = kitap;
+    // Unicode-safe RAFTA filtresi
+    const raftalar = eslesen.filter(k => _oduncNorm(k.durum) === 'RAFTA');
 
-    if (alan) {
-      alan.innerHTML = kitapKartHtml(kitap, `
-        <div class="kitapSatir"><strong>Ödünç Alan:</strong> ${guvenliYazi(kitap.oduncAlan || '-')}</div>
-        <div class="kitapSatir"><strong>Ödünç Tarihi:</strong> ${guvenliYazi(kitap.oduncTarihi || '-')}</div>
-        <div class="kitapSatir"><strong>İade Tarihi:</strong> ${guvenliYazi(kitap.iadeTarihi || '-')}</div>
-      `);
+    if (!raftalar.length) {
+      // Tüm kopyalar ödünçte veya kayıp — kitap bilgisini göster ama uyar
+      if (alan) alan.innerHTML = kitapKartHtml(eslesen[0], '');
+      if (!suppressStatusMessage) mesajGoster('Bu kitap için rafta uygun kopya yok', 'warn');
+      return;
     }
 
-    if (suppressStatusMessage) return;
+    if (raftalar.length === 1) {
+      // Tek RAFTA kopya — otomatik seç, bilgi kartını göster
+      const k = raftalar[0];
+      window.seciliOduncKopya = k;
+      if (alan) alan.innerHTML = kitapKartHtml(k, '');
+      if (!suppressStatusMessage) mesajGoster('Kitap bulundu, ödünç verilebilir', 'success');
 
-    if (String(kitap.durum || '').toUpperCase() === 'ÖDÜNÇTE') {
-      mesajGoster('Bu kitap zaten ödünçte', 'error');
     } else {
-      mesajGoster('Kitap bulundu', 'success');
+      // Birden fazla RAFTA kopya — seçim UI göster
+      if (alan) {
+        alan.innerHTML = _oduncSecimHtml(raftalar, eslesen[0]);
+        _oduncSecimKur(raftalar);
+      }
+      if (!suppressStatusMessage) {
+        mesajGoster(raftalar.length + ' rafta kopya bulundu', 'success');
+      }
     }
+
   } catch (err) {
     mesajGoster('Arama hatası: ' + err.message, 'error');
   }
 }
 
+// ── Çoklu seçim HTML ──────────────────────────────────────────────────────
+function _oduncSecimHtml(raftalar, ilkKitap) {
+  const rows = raftalar.map((k, i) => `
+    <div class="oduncKopyaRow" data-idx="${i}"
+         style="display:flex;align-items:center;justify-content:space-between;
+                padding:12px 14px;border-radius:12px;cursor:pointer;margin-bottom:6px;
+                background:#fff;border:1.5px solid #e5e7eb;
+                -webkit-tap-highlight-color:transparent;transition:background 0.1s;">
+      <span style="font-family:monospace;font-size:15px;font-weight:700;color:#111;">
+        ${guvenliYazi(k.kitapKodu || '-')}
+      </span>
+      <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;
+                   background:#d1fae5;color:#065f46;">Rafta</span>
+    </div>`
+  ).join('');
+
+  return `
+    <div class="kitapKart">
+      <div class="kitapBaslik">${guvenliYazi(ilkKitap.kitapAdi || '-')}</div>
+      <div class="kitapSatir"><strong>ISBN:</strong> ${guvenliYazi(ilkKitap.isbn || '-')}</div>
+      <div class="kitapSatir"><strong>Yazar:</strong> ${guvenliYazi(ilkKitap.yazar || '-')}</div>
+
+      <div style="margin:14px 0 8px;font-size:13px;font-weight:700;color:#6b7280;
+                  text-transform:uppercase;letter-spacing:0.5px;">
+        Rafta Kopyalar (${raftalar.length}) — birini seçin
+      </div>
+
+      <div id="oduncKopyaSecimListe">${rows}</div>
+
+      <div id="oduncKopyaSecimOzet"
+           style="margin:10px 0 0;font-size:14px;font-weight:600;
+                  color:#6b7280;text-align:center;">
+        Kopya seçilmedi
+      </div>
+    </div>`;
+}
+
+// ── Çoklu seçim event handlers ────────────────────────────────────────────
+function _oduncSecimKur(raftalar) {
+  const rows = document.querySelectorAll('.oduncKopyaRow');
+
+  rows.forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = parseInt(row.dataset.idx, 10);
+      const secilen = raftalar[idx];
+
+      // Tüm satırları sıfırla, seçileni vurgula
+      rows.forEach(r => {
+        r.style.background  = '#fff';
+        r.style.borderColor = '#e5e7eb';
+      });
+      row.style.background  = '#d1fae5';
+      row.style.borderColor = '#059669';
+
+      window.seciliOduncKopya = secilen;
+
+      const ozet = document.getElementById('oduncKopyaSecimOzet');
+      if (ozet) {
+        ozet.textContent = guvenliYazi(secilen.kitapKodu || '-') + ' seçildi';
+        ozet.style.color = '#065f46';
+      }
+    });
+  });
+}
+
+// ── Ödünç Ver ─────────────────────────────────────────────────────────────
 async function oduncVer() {
   temizMesaj();
 
-  const kitap = window.seciliOduncKitap;
-  if (!kitap) {
+  const kopya = window.seciliOduncKopya;
+  if (!kopya) {
     mesajGoster('Önce kitabı bulun', 'warn');
     return;
   }
 
-  if (String(kitap.durum || '').toUpperCase() === 'ÖDÜNÇTE') {
-    mesajGoster('Bu kitap zaten ödünçte', 'error');
+  // Çift kontrol: seçilen kopya hâlâ RAFTA mı?
+  if (_oduncNorm(kopya.durum) !== 'RAFTA') {
+    mesajGoster('Seçilen kopya artık rafta değil', 'error');
     return;
   }
 
@@ -280,8 +359,8 @@ async function oduncVer() {
   try {
     const sonuc = await apiPost({
       action: 'loanBook',
-      id: kitap.id,
-      borrower: borrower
+      id: kopya.id,
+      borrower
     });
 
     if (!sonuc.ok) {
@@ -289,9 +368,12 @@ async function oduncVer() {
       return;
     }
 
-    await oduncKitapBul(true);
+    window.seciliOduncKopya = null;
+    await oduncKitapBul(true); // güncel durumu göster
     mesajGoster(sonuc.message || 'Kitap ödünç verildi', 'success');
-    document.getElementById('oduncAlan').value = '';
+    const oduncAlanInput = document.getElementById('oduncAlan');
+    if (oduncAlanInput) oduncAlanInput.value = '';
+
   } catch (err) {
     mesajGoster('Ödünç verme hatası: ' + err.message, 'error');
   }
