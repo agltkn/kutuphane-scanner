@@ -1,11 +1,9 @@
-// js/camera.js — v8
-// v8: iPhone ISBN okuma stabilitesi iyileştirmeleri
-//   1. Çözünürlük: width ideal 1280 / height ideal 720 (hem kameraId hem facingMode)
-//   2. Autofocus: start() sonrası video track'e focusMode=continuous applyConstraints
-//      — desteklemiyorsa sessizce geçilir, hata vermez
-//   3. Tarama kutusu büyütüldü: genişlik %92, yükseklik %44 (ISBN için geniş alan)
-//   4. FPS: normal 12→18, adaptif 15→20
-//   5. aspectRatio yok (v7'den), iOS Safari zoom/crop olmaz
+// js/camera.js — v8.1
+// v8.1: Html5Qrcode uyumluluk düzeltmesi
+//   start() ilk parametresi ya string (cameraId) ya da TEK key'li object olmalı.
+//   _cameraParam: kameraId varsa string, yoksa { facingMode: { ideal: "environment" } }
+//   Çözünürlük (1280x720) → start() sonrası applyConstraints ile best-effort
+// v8: iPhone ISBN okuma stabilitesi iyileştirmeleri (fps, qrbox, autofocus)
 // v7: aspectRatio kaldırıldı
 // v6: _isProcessing lock, onRestartNormal callback
 // v5: restartNormal() + isAdaptifAktif()
@@ -76,19 +74,20 @@ window.KutuphaneCamera = (function () {
     } catch (_) { return null; }
   }
 
-  // ── Video constraints: çözünürlük ekle ───────────────────────────────────
-  // kameraId varsa deviceId ile, yoksa facingMode ile — her iki halde ideal 1280x720
-  function _videoConstraints(kameraId) {
-    const res = { width: { ideal: 1280 }, height: { ideal: 720 } };
-    if (kameraId) {
-      return { deviceId: { exact: kameraId }, ...res };
-    }
-    return { facingMode: 'environment', ...res };
+  // ── Html5Qrcode start() ilk parametresi ──────────────────────────────────
+  // Html5Qrcode kuralı: ya string (cameraId) ya da TEK key'li object.
+  // Çoklu key object → "found N keys" hatası.
+  // Çözünürlük bu parametreye verilemiyor — applyConstraints ile sonradan ayarlanır.
+  function _cameraParam(kameraId) {
+    if (kameraId) return kameraId; // string — library direkt deviceId olarak kullanır
+    return { facingMode: { ideal: 'environment' } }; // tek key, iOS dahil çalışır
   }
 
-  // ── Autofocus uygula (start() sonrası) ────────────────────────────────────
-  // focusMode = 'continuous' destekleniyorsa ayarla, yoksa sessizce geç.
-  // iOS Safari'de getCapabilities() yoktur; try/catch ile korunur.
+  // ── Autofocus + çözünürlük (start() sonrası best-effort) ─────────────────
+  // start() tamamlandıktan sonra video track üzerinden:
+  //   1. focusMode=continuous — destekleniyorsa ayarla (Android Chrome)
+  //   2. width/height ideal 1280x720 — cihaz destekliyorsa uygula
+  // iOS Safari'de getCapabilities() yok → try/catch ile korunur, sessizce geçilir.
   function _autofocusUygula(readerId) {
     setTimeout(() => {
       try {
@@ -96,13 +95,26 @@ window.KutuphaneCamera = (function () {
         const stream  = videoEl?.srcObject;
         const track   = stream?.getVideoTracks?.()?.[0];
         if (!track) return;
-        const caps = track.getCapabilities?.();
-        if (caps?.focusMode?.includes?.('continuous')) {
-          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
-            .catch(() => {});
+
+        const caps        = track.getCapabilities?.() || {};
+        const constraints = {};
+
+        // Continuous autofocus
+        if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+          constraints.advanced = [{ focusMode: 'continuous' }];
+        }
+
+        // Çözünürlük — cihaz 1280 genişliği destekliyorsa iste
+        if (caps.width?.max >= 1280) {
+          constraints.width  = { ideal: 1280 };
+          constraints.height = { ideal: 720 };
+        }
+
+        if (Object.keys(constraints).length > 0) {
+          track.applyConstraints(constraints).catch(() => {});
         }
       } catch (_) {}
-    }, 600); // kamera stream'in stabilize olmasını bekle
+    }, 600); // stream'in stabilize olmasını bekle
   }
 
   // ── Config ─────────────────────────────────────────────────────────────────
@@ -203,13 +215,13 @@ window.KutuphaneCamera = (function () {
     activeReader          = new Html5Qrcode(readerId);
     activeReaderElementId = readerId;
 
-    const kameraId        = await enUygunArkaKameraIdBul();
-    const videoConstraints = _videoConstraints(kameraId); // v8: çözünürlük dahil
+    const kameraId   = await enUygunArkaKameraIdBul();
+    const cameraParam = _cameraParam(kameraId); // string veya tek-key object
 
     let ignoreUntil = 0;
 
     await activeReader.start(
-      videoConstraints,
+      cameraParam,
       scanConfig,
       async decodedText => {
         if (ignoreUntil > 0 && Date.now() < ignoreUntil) return;
