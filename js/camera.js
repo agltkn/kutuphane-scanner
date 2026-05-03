@@ -1,12 +1,13 @@
-// js/camera.js — v9
-// v9: ISBN küçük barkod optimizasyonu
-//   - varsayilanConfig: scan alanı daraltıldı (72%/300px), fps 22 — ISBN daha iyi doldurur
-//   - kucukBarkodConfig: 55%/200px, fps 22
-//   - formatsToSupport: sadece EAN_13, EAN_8, CODE_128 — decode hızı artar
-//   - _autofocusUygula: zoom 1.5–2.0 best-effort (desteklenmiyorsa sessiz geçer)
+// js/camera.js — v10
+// v10: Küçük ISBN barkodu için agresif optimizasyon
+//   - varsayilanConfig: 58%/220px, fps 24, height %22 — dar + ince ISBN odaklı alan
+//   - kucukBarkodConfig: 48%/180px, fps 24, height %20
+//   - formatsToSupport: sadece EAN_13 + EAN_8 (CODE_128 kaldırıldı, decode hızı max)
+//   - _autofocusUygula: zoom 2.0–2.2 hedef (agresif), desteklenmiyorsa sessiz geçer
 //   - Html5Qrcode.start() cameraParam kuralı korundu (string veya tek-key object)
+// v9: scan alanı daraltıldı, zoom 1.5–2.0, EAN+CODE_128
 // v8.1: Html5Qrcode uyumluluk düzeltmesi
-// v8: iPhone ISBN okuma stabilitesi iyileştirmeleri (fps, qrbox, autofocus)
+// v8: iPhone ISBN okuma stabilitesi
 // v7: aspectRatio kaldırıldı
 // v6: _isProcessing lock, onRestartNormal callback
 // v5: restartNormal() + isAdaptifAktif()
@@ -78,20 +79,19 @@ window.KutuphaneCamera = (function () {
   }
 
   // ── Html5Qrcode start() ilk parametresi ──────────────────────────────────
-  // Html5Qrcode kuralı: ya string (cameraId) ya da TEK key'li object.
-  // Çoklu key object → "found N keys" hatası.
-  // Çözünürlük/zoom bu parametreye verilemiyor — applyConstraints ile sonradan ayarlanır.
+  // KURAL: ya string (cameraId) ya da TEK key'li object.
+  // Çoklu key → "cameraIdOrConfig object should have exactly 1 key" hatası.
+  // Zoom/çözünürlük buraya GİRMEZ — start() sonrası applyConstraints ile ayarlanır.
   function _cameraParam(kameraId) {
-    if (kameraId) return kameraId; // string — library direkt deviceId olarak kullanır
-    return { facingMode: { ideal: 'environment' } }; // tek key, iOS dahil çalışır
+    if (kameraId) return kameraId;                       // string — deviceId
+    return { facingMode: { ideal: 'environment' } };     // tek key — iOS dahil çalışır
   }
 
-  // ── Autofocus + çözünürlük + zoom (start() sonrası best-effort) ──────────
-  // start() tamamlandıktan sonra video track üzerinden:
-  //   1. focusMode=continuous — destekleniyorsa ayarla (Android Chrome)
-  //   2. width/height ideal 1280x720 — cihaz destekliyorsa uygula
-  //   3. zoom 1.5–2.0 — küçük ISBN barkodları için best-effort (iOS Safari'de yok)
-  // iOS Safari'de getCapabilities() yok → try/catch ile korunur, sessizce geçilir.
+  // ── Autofocus + çözünürlük + agresif zoom (start() sonrası best-effort) ──
+  //   1. focusMode=continuous (Android Chrome)
+  //   2. width 1280 ideal (destekleniyorsa)
+  //   3. zoom 2.0–2.2 hedef — küçük ISBN için agresif (iOS Safari'de yok, sessiz geçer)
+  // iOS Safari getCapabilities() → undefined → try/catch korur, hata yok.
   function _autofocusUygula(readerId) {
     setTimeout(() => {
       try {
@@ -108,31 +108,32 @@ window.KutuphaneCamera = (function () {
           constraints.advanced = [{ focusMode: 'continuous' }];
         }
 
-        // Çözünürlük — cihaz 1280 genişliği destekliyorsa iste
+        // Çözünürlük — 1280 destekleniyorsa iste
         if (caps.width?.max >= 1280) {
           constraints.width  = { ideal: 1280 };
           constraints.height = { ideal: 720 };
         }
 
-        // Zoom — küçük ISBN için 1.5–2.0 best-effort
-        // iOS Safari'de caps.zoom yok, Android Chrome'da genellikle var
-        if (caps.zoom?.max >= 1.5) {
-          constraints.zoom = caps.zoom.max >= 2.0
-            ? 1.8
-            : Math.min(1.5, caps.zoom.max);
+        // Zoom — agresif: 2.0–2.2 hedef
+        // Android Chrome'da caps.zoom.max genellikle 5–8; iOS'ta caps.zoom yok
+        if (caps.zoom?.max >= 2.0) {
+          constraints.zoom = Math.min(caps.zoom.max, 2.2);
+        } else if (caps.zoom?.max >= 1.5) {
+          // max 2.0 altındaysa mümkün olan en yüksek değeri iste
+          constraints.zoom = caps.zoom.max;
         }
 
         if (Object.keys(constraints).length > 0) {
           track.applyConstraints(constraints).catch(() => {});
         }
       } catch (_) {}
-    }, 600); // stream'in stabilize olmasını bekle
+    }, 600); // stream stabilize olsun
   }
 
   // ── Config ─────────────────────────────────────────────────────────────────
   function _ortakAyarlar() {
     const base = {
-      // aspectRatio YOK (v7): native oran, zoom/crop olmaz
+      // aspectRatio YOK (v7): native oran, crop yok
       disableFlip: false,
       rememberLastUsedCamera: true,
       showTorchButtonIfSupported: true,
@@ -140,11 +141,11 @@ window.KutuphaneCamera = (function () {
       experimentalFeatures: { useBarCodeDetectorIfSupported: true }
     };
     if (typeof Html5QrcodeSupportedFormats !== 'undefined') {
-      // v9: sadece ISBN formatları + CODE_128 — gereksiz formatlar decode hızını düşürür
+      // v10: sadece EAN_13 + EAN_8 — decode en hızlı hali
+      // CODE_128 kaldırıldı; kütüphane barkodları zaten EAN_13 formatında
       base.formatsToSupport = [
-        Html5QrcodeSupportedFormats.EAN_13,   // ISBN-13 (öncelik 1)
-        Html5QrcodeSupportedFormats.EAN_8,    // ISBN-8  (öncelik 2)
-        Html5QrcodeSupportedFormats.CODE_128  // kütüphane barkodları için fallback
+        Html5QrcodeSupportedFormats.EAN_13,  // ISBN-13 (birincil)
+        Html5QrcodeSupportedFormats.EAN_8    // ISBN-8  (ikincil)
       ];
     }
     return base;
@@ -153,12 +154,12 @@ window.KutuphaneCamera = (function () {
   function varsayilanConfig() {
     return {
       ..._ortakAyarlar(),
-      fps: 22, // v9: 18→22
+      fps: 24, // v10: 22→24
       qrbox: (w, h) => {
-        // v9: daraltıldı — ISBN barkodu scan alanını daha iyi doldurur
-        // 92%/420px → 72%/300px (küçük ISBN için ~280px, yeterince dar)
-        const bw = Math.min(Math.round(w * 0.72), 300);
-        const bh = Math.min(Math.round(bw * 0.38), Math.round(h * 0.65));
+        // v10: 72%/300px → 58%/220px
+        // ISBN barkodu dar alanı daha iyi dolduruyor; height ince (yatay barkod için)
+        const bw = Math.min(Math.round(w * 0.58), 220);
+        const bh = Math.min(Math.round(h * 0.22), Math.round(bw * 0.36));
         return { width: bw, height: bh };
       }
     };
@@ -167,11 +168,12 @@ window.KutuphaneCamera = (function () {
   function kucukBarkodConfig() {
     return {
       ..._ortakAyarlar(),
-      fps: 22, // v9: 20→22
-      qrbox: (w, _h) => {
-        // v9: 62%/240px → 55%/200px — çok küçük ISBN için sıkıştırılmış alan
-        const bw = Math.min(Math.round(w * 0.55), 200);
-        return { width: bw, height: Math.round(bw * 0.40) };
+      fps: 24, // v10: 22→24
+      qrbox: (w, h) => {
+        // v10: 55%/200px → 48%/180px — çok küçük ISBN için maksimum zoom odaklı alan
+        const bw = Math.min(Math.round(w * 0.48), 180);
+        const bh = Math.min(Math.round(h * 0.20), Math.round(bw * 0.34));
+        return { width: bw, height: bh };
       }
     };
   }
@@ -227,7 +229,7 @@ window.KutuphaneCamera = (function () {
     activeReaderElementId = readerId;
 
     const kameraId    = await enUygunArkaKameraIdBul();
-    const cameraParam = _cameraParam(kameraId); // string veya tek-key object
+    const cameraParam = _cameraParam(kameraId); // string veya tek-key object — KURAL KORUNDU
 
     let ignoreUntil = 0;
 
@@ -242,6 +244,7 @@ window.KutuphaneCamera = (function () {
         if (temiz === lastScannedCode) return;
         if (_isProcessing) return;
 
+        // İlk geçerli okumada anında callback — gecikme yok
         _isProcessing   = true;
         clearTimeout(adaptifTimer);
         adaptifTimer    = null;
@@ -261,14 +264,15 @@ window.KutuphaneCamera = (function () {
           _isProcessing = false;
         }
       },
-      errMsg => {
-        if (typeof onError === 'function') onError(errMsg);
+      () => {
+        // decode hatası — log spam yapma, sadece onError varsa ilet
+        // (Html5Qrcode her karede "not found" çağırır — normal)
       }
     );
 
     if (ignoreScanMs > 0) ignoreUntil = Date.now() + ignoreScanMs;
 
-    // v8+: continuous autofocus + zoom — destekleniyorsa ayarla
+    // Autofocus + zoom — start() tamamlandıktan sonra uygula
     _autofocusUygula(readerId);
   }
 
