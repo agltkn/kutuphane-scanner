@@ -1,10 +1,10 @@
-// js/camera.js — v10
-// v10: Küçük ISBN barkodu için agresif optimizasyon
-//   - varsayilanConfig: 58%/220px, fps 24, height %22 — dar + ince ISBN odaklı alan
-//   - kucukBarkodConfig: 48%/180px, fps 24, height %20
-//   - formatsToSupport: sadece EAN_13 + EAN_8 (CODE_128 kaldırıldı, decode hızı max)
-//   - _autofocusUygula: zoom 2.0–2.2 hedef (agresif), desteklenmiyorsa sessiz geçer
+// js/camera.js — v11
+// v11: qrbox yatay dikdörtgen — ISBN barkodları kareye değil wide alana hizalanır
+//   - varsayilanConfig: width %88/420px, height %18/110px (geniş + ince şerit)
+//   - kucukBarkodConfig: width %80/360px, height %15/90px (daha ince şerit)
+//   - fps, zoom, autofocus, format listesi v10'dan korundu
 //   - Html5Qrcode.start() cameraParam kuralı korundu (string veya tek-key object)
+// v10: agresif zoom 2.0–2.2, EAN_13+EAN_8, fps 24
 // v9: scan alanı daraltıldı, zoom 1.5–2.0, EAN+CODE_128
 // v8.1: Html5Qrcode uyumluluk düzeltmesi
 // v8: iPhone ISBN okuma stabilitesi
@@ -154,12 +154,13 @@ window.KutuphaneCamera = (function () {
   function varsayilanConfig() {
     return {
       ..._ortakAyarlar(),
-      fps: 24, // v10: 22→24
+      fps: 24,
       qrbox: (w, h) => {
-        // v10: 72%/300px → 58%/220px
-        // ISBN barkodu dar alanı daha iyi dolduruyor; height ince (yatay barkod için)
-        const bw = Math.min(Math.round(w * 0.58), 220);
-        const bh = Math.min(Math.round(h * 0.22), Math.round(bw * 0.36));
+        // v11: ISBN yatay barkod için geniş + ince dikdörtgen
+        // width: ekranın %88'i, max 420px
+        // height: ekranın %18'i, max 110px — kesinlikle kareden uzak
+        const bw = Math.min(Math.round(w * 0.88), 420);
+        const bh = Math.min(Math.round(h * 0.18), 110);
         return { width: bw, height: bh };
       }
     };
@@ -168,11 +169,13 @@ window.KutuphaneCamera = (function () {
   function kucukBarkodConfig() {
     return {
       ..._ortakAyarlar(),
-      fps: 24, // v10: 22→24
+      fps: 24,
       qrbox: (w, h) => {
-        // v10: 55%/200px → 48%/180px — çok küçük ISBN için maksimum zoom odaklı alan
-        const bw = Math.min(Math.round(w * 0.48), 180);
-        const bh = Math.min(Math.round(h * 0.20), Math.round(bw * 0.34));
+        // v11: adaptif mod için daha ince şerit — çok küçük ISBN için
+        // width: ekranın %80'i, max 360px
+        // height: ekranın %15'i, max 90px
+        const bw = Math.min(Math.round(w * 0.80), 360);
+        const bh = Math.min(Math.round(h * 0.15), 90);
         return { width: bw, height: bh };
       }
     };
