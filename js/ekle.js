@@ -1,4 +1,4 @@
-// js/ekle.js — v68
+// js/ekle.js — v69
 // v68: Dinamik kopya numarası
 //   - worker.js isbnLookup ve bookAdd artık mevcutSayisi döndürüyor
 //   - "Ekle (2. kopya)" metni artık dinamik: mevcut kopya sayısı + 1
@@ -25,6 +25,8 @@ async function kamerayiBaslatEkle() {
         if (hint) hint.textContent = '🔍 Hassas mod aktif — barkodu yaklaştırın';
       },
       onDetected: async (isbn) => {
+        // v69: barkod okunduğunda kamera kapanır, sonra form doldurulur
+        await kameraKapat();
         const el = document.getElementById('isbn');
         if (el) el.value = isbn;
         await isbnBilgisiGetir();
@@ -114,17 +116,19 @@ function ekleForm() {
 
       .scannerWrap{
         display:none;
-        margin-top:16px;
+        margin-top:12px;
         border-radius:18px;
         overflow:hidden;
         background:#111;
-        padding:10px;
       }
 
       #reader{
+        display:block;
         width:100%;
-        min-height:260px;
-        border-radius:12px;
+        height:240px;
+        max-width:420px;
+        margin:0 auto;
+        border-radius:16px;
         overflow:hidden;
         background:#000;
         touch-action:manipulation;

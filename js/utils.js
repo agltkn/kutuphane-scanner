@@ -1,4 +1,6 @@
-// js/utils.js — v63
+// js/utils.js — v64
+// v64: kameraBaslat fps default 5→24 (camera.js v11 ile uyumlu)
+//      kameraBaslat: config override kaldırıldı — camera.js varsayilanConfig() kullanılır
 // v63: basHarfBuyut (global title-case, TR locale) + hapticFeedback (safe vibrate)
 //      kameraBaslat: aspectRatio kaldırıldı (camera.js v7 ile uyumlu)
 
@@ -87,10 +89,7 @@ async function kameraBaslat(options) {
   const {
     inputId,
     successMessage = 'ISBN okundu: ',
-    onDetected,
-    fps      = 5,
-    qrWidth  = 280,
-    qrHeight = 90
+    onDetected
   } = options || {};
 
   temizMesaj();
@@ -102,19 +101,17 @@ async function kameraBaslat(options) {
 
   try {
     await window.KutuphaneCamera.start({
-      readerId: 'reader',
-      wrapId:   'scannerWrap',
-      config: {
-        fps,
-        qrbox: { width: qrWidth, height: qrHeight }
-        // aspectRatio kaldırıldı (v63/camera.js v7)
-      },
+      readerId:   'reader',
+      wrapId:     'scannerWrap',
+      adaptifMod: true,
+      // config override YOK — camera.js varsayilanConfig() kullanılır (fps 24, geniş dikdörtgen)
       onDetected: async (isbn) => {
         const input = document.getElementById(inputId);
         if (input) input.value = isbn;
 
-        mesajGoster(successMessage + isbn, 'success');
+        // v64: barkod okunduğunda kamera anında kapatılır
         await kameraKapat();
+        mesajGoster(successMessage + isbn, 'success');
 
         if (typeof onDetected === 'function') {
           await onDetected(isbn);

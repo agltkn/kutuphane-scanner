@@ -97,17 +97,19 @@ function iadeForm() {
 
       .scannerWrap{
         display:none;
-        margin-top:16px;
+        margin-top:12px;
         border-radius:18px;
         overflow:hidden;
         background:#111;
-        padding:10px;
       }
 
       #reader{
+        display:block;
         width:100%;
-        min-height:260px;
-        border-radius:12px;
+        height:240px;
+        max-width:420px;
+        margin:0 auto;
+        border-radius:16px;
         overflow:hidden;
         background:#000;
         touch-action:manipulation;

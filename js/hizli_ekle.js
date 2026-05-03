@@ -1,4 +1,10 @@
-// js/hizli_ekle.js — v69
+// js/hizli_ekle.js — v70
+// v70: Seri okuma UX iyileştirmeleri
+//   - Flash efekti: barkod okunduğunda kamera alanı 130ms yeşil parlar
+//   - Sayaç: "#hizliTaramaSayaci" başarılı kuyruk eklemelerini sayar
+//   - Haptic: navigator.vibrate(50) barkod okunduğunda
+//   - Toast: 'hazir' banneri 2400ms → 1000ms (spam yapmaz)
+//   - CSS: .scan-success overlay eklendi
 // v69 — hizliTopluKaydet: k._basarili property mutation yerine Set<ref> takibi;
 //        if(basarili>0) guard kaldırıldı — filter her zaman çalışır.
 //        Root cause: basarili===0 durumunda filter hiç koşmuyordu.
@@ -28,9 +34,10 @@
 (function () {
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let kuyruk        = [];
-  let bannerTmr     = null;
-  let _yazarListesi = [];
+  let kuyruk          = [];
+  let bannerTmr       = null;
+  let _yazarListesi   = [];
+  let _taramaSayaci   = 0; // v70: başarılı kuyruk ekleme sayacı
 
   // ── Yardımcı ──────────────────────────────────────────────────────────────
   function _guvenli(v) {
@@ -143,7 +150,8 @@
       box-shadow:0 2px 6px rgba(0,0,0,0.07);word-break:break-word;
     `;
     el.innerHTML = `${r.emoji} ${_guvenli(mesaj)}`;
-    bannerTmr = setTimeout(() => { if (el) el.style.display = 'none'; }, 2400);
+    // v70: başarı toast'u 1s, diğerleri 2.4s
+    bannerTmr = setTimeout(() => { if (el) el.style.display = 'none'; }, durum === 'hazir' ? 1000 : 2400);
   }
 
   // ── v65: Duplicate bilgi paneli — kamera altında inline, popup değil ────────
@@ -379,11 +387,32 @@
   }
 
   // ── ISBN İşle — v65 ────────────────────────────────────────────────────────
+  // v70: kamera alanında kısa yeşil flash efekti
+  function _scanFlash() {
+    try {
+      const wrap = document.getElementById('hizliScannerWrap');
+      if (!wrap) return;
+      const flash = document.getElementById('hizliFlash');
+      if (!flash) return;
+      flash.style.opacity = '1';
+      setTimeout(() => { flash.style.opacity = '0'; }, 130);
+    } catch (_) {}
+  }
+
+  // v70: sayacı güncelle
+  function _sayacGuncelle() {
+    const el = document.getElementById('hizliTaramaSayaci');
+    if (el) el.textContent = _taramaSayaci + ' kitap eklendi';
+  }
+
   async function isbnIslendi(isbn) {
     const temiz = _temizIsbn(isbn);
     if (!temiz) return;
 
     _haptic('scan');
+    // v70: haptic + flash
+    try { if (navigator.vibrate) navigator.vibrate(50); } catch (_) {}
+    _scanFlash();
 
     // ── 1. Mevcut durum tespiti ────────────────────────────────────────────
     // Not: otomatik bloklama YOK — her durumda kullanıcıya sorulur
@@ -455,6 +484,7 @@
 
       // Bilgi eksikse (ne DB'den ne internetten gelebildi) kısmen kaydet
       kuyruk.unshift(kayit);
+      _taramaSayaci++; _sayacGuncelle(); // v70
       kuyrukRender();
       bannerGoster('hazir', `Kuyruğa eklendi: ${kayit.kitapAdi || temiz}`);
       _haptic('success');
@@ -475,6 +505,7 @@
     }
 
     kuyruk.unshift(kayit);
+    _taramaSayaci++; _sayacGuncelle(); // v70
     kuyrukRender();
 
     if (kayit.durum === 'hazir')      bannerGoster('hazir',      kayit.kitapAdi);
@@ -635,7 +666,8 @@
     if (!alan) return;
     _videoStyleDuzelt();
     _yazarListesiYukle();
-    kuyruk = [];
+    kuyruk        = [];
+    _taramaSayaci = 0; // v70: her form açılışında sayacı sıfırla
 
     alan.innerHTML = `
       <div style="
@@ -648,8 +680,9 @@
 
         <!-- kamera alanı -->
         <div id="hizliScannerWrap" style="
-          position:relative;height:200px;border-radius:14px;
+          position:relative;height:240px;border-radius:16px;
           overflow:hidden;background:#111;margin-bottom:8px;
+          max-width:420px;margin-left:auto;margin-right:auto;
         ">
           <div id="hizliCameraPlaceholder" style="
             position:absolute;inset:0;display:flex;flex-direction:column;
@@ -665,6 +698,15 @@
             width:100%;height:100%;background:#000;touch-action:manipulation;
           "></div>
 
+          <!-- v70: scan flash overlay — barkod okunduğunda yeşil parlar -->
+          <div id="hizliFlash" style="
+            position:absolute;inset:0;
+            background:rgba(0,220,100,0.28);
+            opacity:0;pointer-events:none;
+            transition:opacity 0.13s ease;
+            border-radius:16px;
+          "></div>
+
           <div id="hizliWatermark" style="
             position:absolute;bottom:8px;left:0;right:0;
             text-align:center;color:rgba(255,255,255,0.38);
@@ -672,6 +714,12 @@
             pointer-events:none;padding:0 10px;display:none;
           ">Küçük barkodlar için 3 sn bekleyin</div>
         </div>
+
+        <!-- v70: tarama sayacı -->
+        <div id="hizliTaramaSayaci" style="
+          text-align:center;font-size:12px;font-weight:600;
+          color:#059669;letter-spacing:0.2px;margin-bottom:4px;min-height:16px;
+        "></div>
 
         <!-- kamera butonları -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
