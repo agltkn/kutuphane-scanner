@@ -195,6 +195,35 @@
         padding:18px 8px;
       }
     }
+
+    /* ── Html5Qrcode UI gizleme ───────────────────────────────────────────────
+       Tarayıcı kutusunun arka planını şeffaf yap, kendi overlay çizgilerini gizle,
+       kamera seçim/çözünürlük dashboard satırını gizle.                          */
+    #reader__scan_region,
+    #reader__dashboard,
+    #reader video {
+      background: transparent !important;
+    }
+    #reader__scan_region::after,
+    #reader__scan_region::before {
+      display: none !important;
+    }
+    #reader__dashboard_section_csr {
+      display: none !important;
+    }
+    /* hizliEkle reader için aynı kurallar */
+    #hizliReader__scan_region,
+    #hizliReader__dashboard,
+    #hizliReader video {
+      background: transparent !important;
+    }
+    #hizliReader__scan_region::after,
+    #hizliReader__scan_region::before {
+      display: none !important;
+    }
+    #hizliReader__dashboard_section_csr {
+      display: none !important;
+    }
   </style>
 </head>
 <body>

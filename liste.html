@@ -279,6 +279,20 @@
       .coverWrap { width: 64px; min-width: 64px; max-width: 64px; }
       .coverImg, .coverPlaceholder { width: 64px; height: 92px; }
     }
+
+    /* ── Html5Qrcode UI gizleme ─────────────────────────────────────────── */
+    #reader__scan_region,
+    #reader__dashboard,
+    #reader video {
+      background: transparent !important;
+    }
+    #reader__scan_region::after,
+    #reader__scan_region::before {
+      display: none !important;
+    }
+    #reader__dashboard_section_csr {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
