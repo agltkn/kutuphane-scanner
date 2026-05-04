@@ -1,9 +1,10 @@
-// js/camera.js — v11
-// v11: qrbox yatay dikdörtgen — ISBN barkodları kareye değil wide alana hizalanır
-//   - varsayilanConfig: width %88/420px, height %18/110px (geniş + ince şerit)
-//   - kucukBarkodConfig: width %80/360px, height %15/90px (daha ince şerit)
-//   - fps, zoom, autofocus, format listesi v10'dan korundu
-//   - Html5Qrcode.start() cameraParam kuralı korundu (string veya tek-key object)
+// js/camera.js — v12
+// v12: Html5Qrcode overlay JS ile tamamen temizlenir
+//   - _overlayTemizle(readerId): start() sonrası 400ms bekler,
+//     __dashboard DOM'dan kaldırılır, __scan_region içinde video/canvas dışı her şey kaldırılır
+//   - video tam kap: position:absolute, inset:0, object-fit:cover
+//   - CSS'e ek olarak JS remove — "display:none yetmez" sorununu çözer
+// v11: qrbox yatay dikdörtgen — ISBN barkodları wide alana hizalanır
 // v10: agresif zoom 2.0–2.2, EAN_13+EAN_8, fps 24
 // v9: scan alanı daraltıldı, zoom 1.5–2.0, EAN+CODE_128
 // v8.1: Html5Qrcode uyumluluk düzeltmesi
@@ -85,6 +86,61 @@ window.KutuphaneCamera = (function () {
   function _cameraParam(kameraId) {
     if (kameraId) return kameraId;                       // string — deviceId
     return { facingMode: { ideal: 'environment' } };     // tek key — iOS dahil çalışır
+  }
+
+  // ── Overlay temizleyici (start() sonrası JS remove) ───────────────────────
+  // Html5Qrcode DOM'a inject ettiği:
+  //   __dashboard (kamera seçimi, dosya yükleme) → tamamen kaldır
+  //   __scan_region içi (border overlay, finder div) → video/canvas dışı kaldır
+  //   video → absolute, tam kap, object-fit:cover
+  // CSS'in göremediği dinamik elementler için JS remove şarttır.
+  function _overlayTemizle(readerId) {
+    setTimeout(() => {
+      try {
+        const container = document.getElementById(readerId);
+        if (!container) return;
+
+        // 1. Dashboard tamamen kaldır
+        const dashboard = document.getElementById(readerId + '__dashboard');
+        if (dashboard) dashboard.remove();
+
+        // 2. scan_region: video/canvas dışındaki overlay div'leri kaldır
+        const scanRegion = document.getElementById(readerId + '__scan_region');
+        if (scanRegion) {
+          Array.from(scanRegion.children).forEach(child => {
+            const tag = child.tagName.toUpperCase();
+            if (tag !== 'VIDEO' && tag !== 'CANVAS') child.remove();
+          });
+          scanRegion.style.cssText =
+            'position:relative!important;width:100%!important;' +
+            'height:100%!important;overflow:hidden!important;' +
+            'background:transparent!important;border:none!important;' +
+            'box-shadow:none!important;';
+        }
+
+        // 3. container direkt altında kalan wrapper div'leri temizle
+        //    (Html5Qrcode versiyonuna göre yapı değişebilir)
+        Array.from(container.children).forEach(child => {
+          const id  = child.id || '';
+          const tag = child.tagName.toUpperCase();
+          // scan_region zaten ele alındı; video/canvas'a dokunma
+          if (id.includes('__scan_region')) return;
+          if (tag === 'VIDEO' || tag === 'CANVAS') return;
+          // İçinde video barındırmayan div'leri kaldır
+          if (!child.querySelector('video')) child.remove();
+        });
+
+        // 4. video tam kap
+        const video = container.querySelector('video');
+        if (video) {
+          video.style.cssText =
+            'position:absolute!important;inset:0!important;' +
+            'width:100%!important;height:100%!important;' +
+            'object-fit:cover!important;background:transparent!important;' +
+            'border:none!important;outline:none!important;';
+        }
+      } catch (_) {}
+    }, 400); // Html5Qrcode DOM inject etsin diye bekle
   }
 
   // ── Autofocus + çözünürlük + agresif zoom (start() sonrası best-effort) ──
@@ -277,6 +333,8 @@ window.KutuphaneCamera = (function () {
 
     // Autofocus + zoom — start() tamamlandıktan sonra uygula
     _autofocusUygula(readerId);
+    // v12: Html5Qrcode overlay'lerini JS ile temizle
+    _overlayTemizle(readerId);
   }
 
   // ── Dahili: normal moda dön (adaptif sonrası) ─────────────────────────────

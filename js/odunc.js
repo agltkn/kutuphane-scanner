@@ -1,4 +1,8 @@
-// js/odunc.js — v2
+// js/odunc.js — v3
+// v3: Ödünç ver akışı düzeltildi
+//   - #oduncVerSection: kopya bulunana kadar gizli, sonra açılır
+//   - gunSayisi alanı eklendi (formda + API payload'da)
+//   - oduncKitapBul: section göster/gizle kontrolü eklendi
 // v2: ISBN aramasında tüm kopyalar dikkate alınır
 //   1. _oduncNorm(): Unicode-safe durum normalizer (liste.js / iade_v2.js ile aynı)
 //   2. oduncKitapBul(): kitaplar.find() → filter() — tüm kopyaları tarar
@@ -202,10 +206,16 @@ function oduncVerForm() {
 
       <div id="oduncKitapAlani"></div>
 
-      <label class="formLabel">Kime Verildi</label>
-      <input class="formInput" type="text" id="oduncAlan" placeholder="Ad Soyad">
+      <!-- v3: kopya seçilene kadar gizli; oduncKitapBul başarıyla tamamlanınca açılır -->
+      <div id="oduncVerSection" style="display:none">
+        <label class="formLabel">Kime Verildi</label>
+        <input class="formInput" type="text" id="oduncAlan" placeholder="Ad Soyad">
 
-      <button class="actionBtn greenBtn" onclick="oduncVer()">📤 Ödünç Ver</button>
+        <label class="formLabel">Kaç Gün</label>
+        <input class="formInput" type="number" id="oduncGun" placeholder="Örn: 14" min="1" max="365" value="14">
+
+        <button class="actionBtn greenBtn" onclick="oduncVer()">📤 Ödünç Ver</button>
+      </div>
 
       <div id="mesajKutusu" class="mesajKutusu"></div>
     </div>
@@ -217,9 +227,16 @@ function oduncVerForm() {
 }
 
 // ── Kitabı Bul ────────────────────────────────────────────────────────────
+// v3: #oduncVerSection göster/gizle yardımcısı
+function _oduncVerSectionGoster(goster) {
+  const sec = document.getElementById('oduncVerSection');
+  if (sec) sec.style.display = goster ? 'block' : 'none';
+}
+
 async function oduncKitapBul(suppressStatusMessage = false) {
   temizMesaj();
   window.seciliOduncKopya = null;
+  _oduncVerSectionGoster(false); // her aramada önce gizle
 
   const alan = document.getElementById('oduncKitapAlani');
   if (alan) alan.innerHTML = '';
@@ -242,27 +259,28 @@ async function oduncKitapBul(suppressStatusMessage = false) {
     const raftalar = eslesen.filter(k => _oduncNorm(k.durum) === 'RAFTA');
 
     if (!raftalar.length) {
-      // Tüm kopyalar ödünçte veya kayıp — kitap bilgisini göster ama uyar
+      // Tüm kopyalar ödünçte veya kayıp — bilgi göster ama form açma
       if (alan) alan.innerHTML = kitapKartHtml(eslesen[0], '');
       if (!suppressStatusMessage) mesajGoster('Bu kitap için rafta uygun kopya yok', 'warn');
       return;
     }
 
     if (raftalar.length === 1) {
-      // Tek RAFTA kopya — otomatik seç, bilgi kartını göster
+      // Tek RAFTA kopya — otomatik seç
       const k = raftalar[0];
       window.seciliOduncKopya = k;
       if (alan) alan.innerHTML = kitapKartHtml(k, '');
-      if (!suppressStatusMessage) mesajGoster('Kitap bulundu, ödünç verilebilir', 'success');
+      _oduncVerSectionGoster(true); // ödünç verme formu açılır
+      if (!suppressStatusMessage) mesajGoster('Kitap bulundu — ödünç verilebilir', 'success');
 
     } else {
-      // Birden fazla RAFTA kopya — seçim UI göster
+      // Birden fazla RAFTA kopya — önce seçim UI, form seçimden sonra açılır
       if (alan) {
         alan.innerHTML = _oduncSecimHtml(raftalar, eslesen[0]);
-        _oduncSecimKur(raftalar);
+        _oduncSecimKurV3(raftalar); // v3: seçimde form açılır
       }
       if (!suppressStatusMessage) {
-        mesajGoster(raftalar.length + ' rafta kopya bulundu', 'success');
+        mesajGoster(raftalar.length + ' rafta kopya bulundu — birini seçin', 'success');
       }
     }
 
@@ -308,8 +326,8 @@ function _oduncSecimHtml(raftalar, ilkKitap) {
     </div>`;
 }
 
-// ── Çoklu seçim event handlers ────────────────────────────────────────────
-function _oduncSecimKur(raftalar) {
+// ── Çoklu seçim event handlers (v3: seçim yapınca ödünç formu açılır) ────
+function _oduncSecimKurV3(raftalar) {
   const rows = document.querySelectorAll('.oduncKopyaRow');
 
   rows.forEach(row => {
@@ -332,6 +350,9 @@ function _oduncSecimKur(raftalar) {
         ozet.textContent = guvenliYazi(secilen.kitapKodu || '-') + ' seçildi';
         ozet.style.color = '#065f46';
       }
+
+      // v3: kopya seçilince ödünç verme formu (kişi + gün) açılır
+      _oduncVerSectionGoster(true);
     });
   });
 }
@@ -358,11 +379,15 @@ async function oduncVer() {
     return;
   }
 
+  // v3: gunSayisi — varsayılan 14
+  const gunSayisi = Math.max(1, parseInt(document.getElementById('oduncGun')?.value || '14', 10) || 14);
+
   try {
     const sonuc = await apiPost({
       action: 'loanBook',
       id: kopya.id,
-      borrower
+      borrower,
+      gunSayisi
     });
 
     if (!sonuc.ok) {
@@ -371,10 +396,13 @@ async function oduncVer() {
     }
 
     window.seciliOduncKopya = null;
+    _oduncVerSectionGoster(false); // formu kapat
     await oduncKitapBul(true); // güncel durumu göster
     mesajGoster(sonuc.message || 'Kitap ödünç verildi', 'success');
     const oduncAlanInput = document.getElementById('oduncAlan');
     if (oduncAlanInput) oduncAlanInput.value = '';
+    const oduncGunInput = document.getElementById('oduncGun');
+    if (oduncGunInput) oduncGunInput.value = '14';
 
   } catch (err) {
     mesajGoster('Ödünç verme hatası: ' + err.message, 'error');
